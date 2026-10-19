@@ -12,7 +12,7 @@ import pandas as pd
 import pytest
 from sqlalchemy import select
 
-from krishibhav import clean, config, datagov, db, ingest, report, series, weather
+from krishibhav import clean, config, datagov, db, ingest, markets, report, series, weather
 
 HEADER = ["Sl no.", "District Name", "Market Name", "Commodity", "Variety", "Grade",
           "Min Price (Rs./Quintal)", "Max Price (Rs./Quintal)", "Modal Price (Rs./Quintal)", "Price Date"]
@@ -75,6 +75,8 @@ def test_canon_col(raw, expected):
     ("Deesa(Deesa Veg Yard)", "Deesa Veg Yard"),
     ("DEESA (BHILDI)", "Deesa Bhildi"),
     ("Deesa APMC", "Deesa"),
+    ("Deesa(Bhildi) APMC", "Deesa Bhildi"),
+    ("Deesa(Deesa Veg Yard) APMC", "Deesa Veg Yard"),
     ("palanpur", "Palanpur"),
 ])
 def test_norm_market(raw, expected):
@@ -417,3 +419,45 @@ def test_datagov_skips_filter_the_api_ignored(monkeypatch):
     monkeypatch.setattr(datagov, "_get", fake_get)
     assert datagov.fetch_state("test-key") == [gujarat]
     assert len(calls) == 2                               # did not page through all of India
+
+
+def test_check_markets(env, monkeypatch):
+    """Pages through both market spellings, caches the rows, measures coverage."""
+    def row(day, variety="Desi", market="Deesa"):
+        return {"State": "Gujarat", "District": "Banaskanth", "Market": market, "Commodity": "Potato",
+                "Variety": variety, "Grade": "FAQ", "Arrival_Date": day,
+                "Min_Price": "900", "Max_Price": "1100", "Modal_Price": "1000"}
+
+    data = {"Deesa": [row("01/01/2025"), row("03/01/2025"), row("03/01/2025", "Jyoti")],
+            "Deesa APMC": [row("04/01/2025", market="Deesa APMC")]}
+    calls = []
+
+    def fake_get(session, url, params, tries=4):
+        assert config.DATAGOV_HIST_RESOURCE_ID in url and params["filters[Commodity]"] == "Potato"
+        calls.append((params["filters[Market]"], params["offset"]))
+        rows = data[params["filters[Market]"]]
+        return {"records": rows[params["offset"]:params["offset"] + params["limit"]], "total": len(rows)}
+
+    monkeypatch.setattr(datagov, "_get", fake_get)
+    monkeypatch.setattr(markets, "PAGE", 2)
+    monkeypatch.setattr(config, "DATAGOV_API_KEY", "test-key")
+    monkeypatch.setattr(config, "HISTORY_START", "2025-01-01")
+    monkeypatch.setattr(config, "AGMARKNET_MARKET_NAMES", {"Deesa": "Deesa"})
+    monkeypatch.setattr(config, "AGMARKNET_COMMODITY_NAMES", {"Potato": ["Potato"]})
+
+    table = markets.check_markets()
+    assert calls == [("Deesa", 0), ("Deesa", 2), ("Deesa APMC", 0)]
+    deesa = table.loc[("Deesa", "Potato")]
+    assert deesa["all_%"] == 75.0                          # Jan 1, 3, 4 of 4 trading days (Wed-Sat)
+    assert deesa["main_variety"].startswith("Desi")
+    assert (config.REPORTS / "market_check.csv").exists()
+
+    calls.clear()
+    markets.check_markets()                                # second run uses the saved file
+    assert calls == []
+    assert (markets.hist_dir() / "potato_deesa_datagov.csv").exists()
+
+    assert ingest.load_files() == 4                        # the saved rows double as a backfill
+    with db.get_engine().connect() as conn:
+        sources = {r.source for r in conn.execute(select(db.mandi_prices.c.source))}
+    assert sources == {"datagov_hist"}

@@ -23,10 +23,25 @@ pytest -q
 ```
 
 Use Python 3.14 (the versions in `requirements.txt` are pinned to it).
-On Mac/Linux use `source .venv/bin/activate` and `cp`. All 50 tests should pass.
+On Mac/Linux use `source .venv/bin/activate` and `cp`. All 63 tests should pass.
 They use fake files, so no internet is needed.
 
-## 2. Download historical prices (one evening of clicking)
+## 2a. First check which markets report enough
+
+```bat
+python -m krishibhav check-markets --markets "Tharad,Diyodar"
+```
+
+Uses data.gov.in's Agmarknet price history (needs the API key from step 3) to
+show, per market and crop, the share of trading days (Mon-Sat) with a price
+in each year since 2014, and the main variety. Extra markets are optional;
+use their exact Agmarknet names. Results go to `reports/market_check.csv`.
+
+The downloaded rows are kept in `data/raw/agmarknet/datagov_hist/`, so
+`load-files` also loads them as a ready-made **price** backfill. They have no
+arrivals, so you still need the Agmarknet or CEDA reports below for arrivals.
+
+## 2b. Download historical prices and arrivals (one evening of clicking)
 
 1. Open **agmarknet.gov.in → Price and Arrivals** (commodity-wise or market-wise report).
 2. Choose State **Gujarat**, District **Banaskantha**, Market **Deesa** (also try
@@ -119,6 +134,7 @@ filled and marked `filled=True`; longer gaps stay empty.
 | `load-weather` | Re-load all saved forecast files |
 | `build-series` | Write `data/processed/daily_series.csv` |
 | `report` | Coverage table and charts in `reports/` |
+| `check-markets [--markets "A,B"] [--refresh]` | Reporting days per market, crop and year |
 | `daily` | `fetch-today` + `fetch-weather` + `build-series` |
 
 ## Project layout
@@ -133,7 +149,8 @@ krishibhav/
   weather.py    Open-Meteo history + forecast
   series.py     one variety, one clean daily series per market and commodity
   report.py     coverage table and charts
-tests/          50 tests on fake Agmarknet/API data
+  markets.py    check-markets: how often each market reports (Agmarknet history)
+tests/          63 tests on fake Agmarknet/API data
 ```
 
 ## If something breaks

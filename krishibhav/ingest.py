@@ -26,7 +26,8 @@ def load_files(folder: Path | None = None, keep_all: bool = False) -> int:
     db.init_db(engine)
     total = 0
     for path in files:
-        source = "ceda_file" if "ceda" in path.name.lower() else "agmarknet_file"
+        name = path.name.lower()
+        source = "ceda_file" if "ceda" in name else "datagov_hist" if "datagov" in name else "agmarknet_file"
         try:
             df, rep = normalise(read_table(path), source=source, file_hint=path.stem, keep_all=keep_all)
         except Exception as exc:  # keep going; report the bad file

@@ -8,6 +8,7 @@
   load-weather    re-load all saved forecast files
   build-series    write data/processed/daily_series.csv
   report          coverage table + price charts in reports/
+  check-markets   how often each market reports each crop, per year (Agmarknet history)
   daily           fetch-today + fetch-weather + build-series (for the scheduler)
 """
 from __future__ import annotations
@@ -37,13 +38,17 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("load-weather")
     sub.add_parser("build-series")
     sub.add_parser("report")
+    p = sub.add_parser("check-markets")
+    p.add_argument("--markets", default="",
+                   help='extra Agmarknet market names, comma separated, e.g. "Tharad,Diyodar"')
+    p.add_argument("--refresh", action="store_true", help="download again instead of using saved files")
     sub.add_parser("daily")
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s",
                         datefmt="%H:%M:%S")
 
-    from . import db, ingest, datagov, weather, series, report
+    from . import db, ingest, datagov, weather, series, report, markets
 
     if args.cmd == "init-db":
         db.init_db(db.get_engine())
@@ -62,6 +67,9 @@ def main(argv: list[str] | None = None) -> int:
         series.build_series()
     elif args.cmd == "report":
         report.run_report()
+    elif args.cmd == "check-markets":
+        extra = [m.strip() for m in args.markets.split(",") if m.strip()]
+        markets.check_markets(extra, refresh=args.refresh)
     elif args.cmd == "daily":
         failed = False
         for step in (datagov.fetch_today, lambda: weather.fetch_weather(), series.build_series):

@@ -37,6 +37,9 @@ DATAGOV_API_KEY = os.getenv("DATAGOV_API_KEY", "")
 # "Current Daily Price of Various Commodities from Various Markets (Mandi)" on data.gov.in.
 # If data.gov.in changes the resource, copy the new ID from the dataset page into .env.
 DATAGOV_RESOURCE_ID = os.getenv("DATAGOV_RESOURCE_ID", "9ef84268-d588-465a-a308-a864a43d0070")
+# "Variety-wise Daily Market Prices Data of Commodity": Agmarknet history since
+# the 2000s (prices only, no arrivals). Used by `check-markets`.
+DATAGOV_HIST_RESOURCE_ID = os.getenv("DATAGOV_HIST_RESOURCE_ID", "35985678-0d79-46b4-9ed6-6f13308a1d24")
 
 STATE = "Gujarat"
 # One year before the 2015 training start, so the 365-day lag exists from day one.
@@ -83,6 +86,25 @@ MARKETS: dict[str, str] = {
     "Palanpur": "comparison",
     "Dhanera": "comparison",
     "Unjha": "comparison",
+}
+
+# Exact names Agmarknet uses, for querying its history. Recent rows add " APMC"
+# to the market name; check-markets asks for both spellings.
+AGMARKNET_MARKET_NAMES: dict[str, str] = {
+    "Deesa": "Deesa",
+    "Deesa Bhildi": "Deesa(Bhildi)",
+    "Deesa Veg Yard": "Deesa(Deesa Veg Yard)",
+    "Palanpur": "Palanpur",
+    "Dhanera": "Dhanera",
+    "Unjha": "Unjha",
+}
+AGMARKNET_COMMODITY_NAMES: dict[str, list[str]] = {
+    "Potato": ["Potato"],
+    "Castor Seed": ["Castor Seed"],
+    "Groundnut": ["Groundnut"],
+    "Rajgira": ["Rajgir"],
+    "Bajra": ["Bajra(Pearl Millet/Cumbu)"],
+    "Cumin": ["Cummin Seed(Jeera)"],
 }
 
 # Approximate town-centre coordinates (lat, lon). Check them on a map and
