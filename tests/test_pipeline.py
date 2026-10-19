@@ -97,9 +97,8 @@ def test_norm_commodity():
     ("Groundnut (Split)", None),
     ("Castor Oil", None),
     ("Groundnut pods (raw)", "Groundnut"),
-    ("Rajgir", "Rajgira"),
-    ("Rajgira", "Rajgira"),
-    ("Cumin Seed(Jeera)", "Cumin"),
+    ("Rajgir", None),                    # dropped as 4th crop: bajra chosen
+    ("Cummin Seed(Jeera)", None),
     ("Bajra(Pearl Millet/Cumbu)", "Bajra"),
 ])
 def test_norm_commodity_other_products(raw, expected):
@@ -272,6 +271,25 @@ def test_variety_aliases_merge_spellings(monkeypatch):
                     price_rows(5, variety="Jyoti")])
     out = series.pick_variety(df)
     assert set(out["variety"]) == {"Desi"} and len(out) == 6               # 6 Desi days beat 5 Jyoti
+
+
+def test_deesa_yards_merge_into_one_series():
+    """Each yard keeps its own variety; together they fill each other's gaps."""
+    df = pd.concat([
+        price_rows(2, market="Deesa", commodity="Castor Seed", variety="Other", start="2026-01-01"),
+        price_rows(2, market="Deesa Bhildi", commodity="Castor Seed", variety="Castor", start="2026-01-03"),
+        price_rows(1, market="Deesa Bhildi", commodity="Castor Seed", variety="Other", start="2026-01-04"),
+        price_rows(1, market="Deesa Veg Yard", commodity="Castor Seed", variety="Other", start="2026-01-05"),
+        price_rows(3, market="Palanpur", commodity="Castor Seed", variety="Other"),
+        price_rows(3, market="Tharad", commodity="Castor Seed", variety="Other"),   # not configured
+        price_rows(3, market="Deesa", commodity="Rajgira", variety="Other"),         # dropped crop
+    ])
+    daily = series.daily_prices(df)
+    assert set(zip(daily["market"], daily["commodity"])) == {("Deesa", "Castor Seed"),
+                                                             ("Palanpur", "Castor Seed")}
+    deesa = daily[daily["market"] == "Deesa"].set_index("date")
+    assert len(deesa) == 5                                    # Jan 1-5 from three yards
+    assert deesa.loc["2026-01-04", "n_rows"] == 1             # Bhildi's minor variety left out
 
 
 def test_arrivals_only_row_does_not_dilute_price():

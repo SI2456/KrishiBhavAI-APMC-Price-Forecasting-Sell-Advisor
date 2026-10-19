@@ -52,10 +52,9 @@ COMMODITIES: dict[str, list[str]] = {
     "Potato": ["potato", "aloo", "bataka"],
     "Castor Seed": ["castor", "erandi"],
     "Groundnut": ["groundnut", "ground nut", "peanut"],
-    # Fourth crop: keep the one your father's shop handles most, delete the others.
-    "Rajgira": ["rajgir", "rajgira", "amaranth"],
+    # Fourth crop. Chosen with check-markets (Oct 2026): bajra is reported on 78% of
+    # trading days at Deesa since 2014; rajgira only from 2024, cumin is an Unjha crop.
     "Bajra": ["bajra", "pearl millet"],
-    "Cumin": ["cumin", "jeera"],
 }
 
 # Raw names that contain an alias above but are a different product with a
@@ -88,6 +87,14 @@ MARKETS: dict[str, str] = {
     "Unjha": "comparison",
 }
 
+# Yards modelled as one market: their rows stay separate in the database (one
+# per yard) and are combined into one daily price when the series is built.
+# Each Deesa yard alone reports on about half the trading days; together castor
+# reaches ~70% and bajra ~78% (check-markets, Oct 2026).
+MARKET_GROUPS: dict[str, list[str]] = {
+    "Deesa": ["Deesa", "Deesa Bhildi", "Deesa Veg Yard"],
+}
+
 # Exact names Agmarknet uses, for querying its history. Recent rows add " APMC"
 # to the market name; check-markets asks for both spellings.
 AGMARKNET_MARKET_NAMES: dict[str, str] = {
@@ -102,9 +109,7 @@ AGMARKNET_COMMODITY_NAMES: dict[str, list[str]] = {
     "Potato": ["Potato"],
     "Castor Seed": ["Castor Seed"],
     "Groundnut": ["Groundnut"],
-    "Rajgira": ["Rajgir"],
     "Bajra": ["Bajra(Pearl Millet/Cumbu)"],
-    "Cumin": ["Cummin Seed(Jeera)"],
 }
 
 # Approximate town-centre coordinates (lat, lon). Check them on a map and

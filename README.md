@@ -49,7 +49,7 @@ arrivals, so you still need the Agmarknet or CEDA reports below for arrivals.
    If the site refuses long ranges, download one year at a time.
 3. Export to Excel and save into `data/raw/agmarknet/` with a name like
    `potato_deesa-veg-yard_2015.xlsx` (see the README in that folder).
-4. Repeat for each commodity (potato, castor, groundnut, your 4th crop) and
+4. Repeat for each commodity (potato, castor, groundnut, bajra) and
    the comparison markets (Palanpur, Dhanera, Unjha). Download the
    **arrivals** report too if it comes separately; rows with the same date,
    market, commodity, variety and grade merge automatically.
@@ -115,7 +115,9 @@ python -m krishibhav build-series
 ```
 
 Writes `data/processed/daily_series.csv`: one row per day per market and
-commodity, using one variety per series (the one reported on the most days, or
+commodity. Deesa, Deesa Bhildi and Deesa Veg Yard are combined into one
+**Deesa** series (`MARKET_GROUPS` in `config.py`), because each yard alone
+reports on only about half the trading days. Each yard uses one variety (the one reported on the most days, or
 the one you set in `MAIN_VARIETY` in `config.py`; merge spellings with
 `VARIETY_ALIASES`). Several grades on the same day are combined into one price
 (weighted by arrivals). Prices more than 3x away from the surrounding days are

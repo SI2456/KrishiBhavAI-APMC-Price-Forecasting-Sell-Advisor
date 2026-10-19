@@ -1,6 +1,9 @@
 """Turn raw price rows into one clean daily series per (market, commodity).
 
 Steps, in order:
+0. merge_markets: yards listed in config.MARKET_GROUPS become one market
+   (Deesa, Deesa Bhildi and Deesa Veg Yard -> Deesa); crops and markets not in
+   config are left out.
 1. pick_variety: keep ONE variety per series (spellings merged with
    config.VARIETY_ALIASES; chosen with config.MAIN_VARIETY or the variety
    reported on the most days). Mixing varieties would make a change in the
@@ -34,6 +37,17 @@ def read_prices(engine=None) -> pd.DataFrame:
     return df
 
 
+def merge_markets(df: pd.DataFrame) -> pd.DataFrame:
+    """Keep configured crops and markets, and rename grouped yards to their group."""
+    if df.empty:
+        return df
+    d = df[df["commodity"].isin(config.COMMODITIES) & df["market"].isin(config.MARKETS)].copy()
+    group_of = {yard: group for group, yards in config.MARKET_GROUPS.items() for yard in yards}
+    d["yard"] = d["market"]
+    d["market"] = d["market"].map(lambda m: group_of.get(m, m))
+    return d
+
+
 def canon_variety(commodity: str, raw: object) -> str:
     """Map a raw variety name to its canonical name from config.VARIETY_ALIASES."""
     name = "" if pd.isna(raw) else str(raw).strip()
@@ -44,15 +58,17 @@ def canon_variety(commodity: str, raw: object) -> str:
 
 
 def pick_variety(df: pd.DataFrame) -> pd.DataFrame:
-    """Keep the rows of one variety per (market, commodity)."""
+    """Keep the rows of one variety per (market, commodity). For a merged market the
+    choice is made per yard, so yards that name the variety differently all count."""
     if df.empty:
         return df
     d = df.copy()
     if "variety" not in d.columns:
         d["variety"] = ""
     d["variety"] = [canon_variety(c, v) for c, v in zip(d["commodity"], d["variety"])]
+    place = "yard" if "yard" in d.columns else "market"
     parts = []
-    for (market, commodity), s in d.groupby(["market", "commodity"]):
+    for (market, commodity), s in d.groupby([place, "commodity"]):
         priced = s[s["modal_price"].notna()]
         main = config.MAIN_VARIETY.get(commodity)
         if main is not None and main not in set(s["variety"]):
@@ -126,7 +142,7 @@ def drop_spikes(daily: pd.DataFrame, ratio: float = config.SPIKE_RATIO, window: 
 
 def daily_prices(prices: pd.DataFrame) -> pd.DataFrame:
     """Raw database rows -> one checked price per day per market and commodity."""
-    return drop_spikes(combine_daily(pick_variety(prices)))
+    return drop_spikes(combine_daily(pick_variety(merge_markets(prices))))
 
 
 def fill_calendar(daily: pd.DataFrame, max_fill: int = config.MAX_FILL_DAYS) -> pd.DataFrame:
