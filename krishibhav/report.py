@@ -1,7 +1,9 @@
 """Data quality report: coverage per series and a price chart for each one.
 
 Run it after every load. Drop any market/commodity with coverage under ~70%
-from modelling; note the decision in your report.
+from modelling; note the decision in your report. Coverage is measured over
+the whole history window (config.HISTORY_START to the latest date in the data),
+so a series that only starts in 2022 shows low coverage instead of 100%.
 """
 from __future__ import annotations
 
@@ -10,29 +12,41 @@ import logging
 import pandas as pd
 
 from . import config
-from .series import read_prices, combine_daily
+from .series import daily_prices, read_prices
 
 log = logging.getLogger(__name__)
 
 
-def coverage_table(daily: pd.DataFrame) -> pd.DataFrame:
+def coverage_table(daily: pd.DataFrame, start: str | None = None) -> pd.DataFrame:
+    window_start = pd.Timestamp(start or config.HISTORY_START)
+    window_end = daily["date"].max()
+    all_days = pd.date_range(window_start, window_end, freq="D")
+    trading_days = all_days[all_days.dayofweek != 6]              # APMCs mostly shut on Sunday
     rows = []
     for (market, commodity), s in daily.groupby(["market", "commodity"]):
-        dates = pd.DatetimeIndex(sorted(s["date"].unique()))
-        all_days = pd.date_range(dates.min(), dates.max(), freq="D")
-        trading_days = all_days[all_days.dayofweek != 6]          # APMCs mostly shut on Sunday
-        gaps = dates.to_series().diff().dt.days.fillna(0)
+        priced = s[s["modal_price"].notna()]
+        dates = pd.DatetimeIndex(sorted(priced["date"].unique()))
+        if dates.empty:
+            continue
+        in_window = dates[(dates >= window_start) & (dates.dayofweek != 6)]
+        edges = pd.DatetimeIndex([window_start - pd.Timedelta(days=1)]).append(
+            dates[dates >= window_start]).append(
+            pd.DatetimeIndex([window_end + pd.Timedelta(days=1)]))
+        gaps = edges.to_series().diff().dt.days.fillna(0) - 1     # empty days between reports
         rows.append({
             "market": market,
             "commodity": commodity,
+            "variety": s["variety"].iloc[0] if "variety" in s.columns else "",
             "first": dates.min().date(),
             "last": dates.max().date(),
             "days_reported": len(dates),
-            "coverage_pct": round(100 * len(dates) / max(len(trading_days), 1), 1),
+            "coverage_pct": round(100 * len(in_window) / max(len(trading_days), 1), 1),
             "longest_gap_days": int(gaps.max()),
             "median_modal_rs_qtl": round(float(s["modal_price"].median()), 0),
             "arrivals_known_pct": round(100 * s["arrivals_tonnes"].notna().mean(), 1),
         })
+    if not rows:
+        return pd.DataFrame()
     return pd.DataFrame(rows).sort_values(["market", "commodity"]).reset_index(drop=True)
 
 
@@ -66,7 +80,7 @@ def run_report() -> pd.DataFrame:
     if prices.empty:
         log.warning("No prices in the database yet.")
         return pd.DataFrame()
-    daily = combine_daily(prices)
+    daily = daily_prices(prices)
     table = coverage_table(daily)
     config.REPORTS.mkdir(parents=True, exist_ok=True)
     table.to_csv(config.REPORTS / "coverage.csv", index=False)

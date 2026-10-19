@@ -13,7 +13,8 @@ Open-Meteo weather ─────┘                                           
 ## 1. Setup (Windows)
 
 ```bat
-cd krishibhav
+git clone https://github.com/SI2456/KrishiBhavAI-APMC-Price-Forecasting-Sell-Advisor.git krishibhavAI
+cd krishibhavAI
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
@@ -21,6 +22,7 @@ copy .env.example .env
 pytest -q
 ```
 
+Use Python 3.14 (the versions in `requirements.txt` are pinned to it).
 On Mac/Linux use `source .venv/bin/activate` and `cp`. All 50 tests should pass.
 They use fake files, so no internet is needed.
 
@@ -34,7 +36,8 @@ They use fake files, so no internet is needed.
    `potato_deesa-veg-yard_2015.xlsx` (see the README in that folder).
 4. Repeat for each commodity (potato, castor, groundnut, your 4th crop) and
    the comparison markets (Palanpur, Dhanera, Unjha). Download the
-   **arrivals** report too if it comes separately; it merges automatically.
+   **arrivals** report too if it comes separately; rows with the same date,
+   market, commodity, variety and grade merge automatically.
 
 Faster alternative for the backfill: **CEDA Agri Market Data**
 (agmarknet.ceda.ashoka.edu.in) lets you download Agmarknet data for a state in
@@ -49,7 +52,9 @@ python -m krishibhav report
 
 `report` prints coverage per market and commodity and saves a chart for each
 in `reports/plots/`. **Look at every chart**: flat lines, sudden 10x jumps, or
-long gaps mean a bad download. Coverage under ~70% → drop that series.
+long gaps mean a bad download. Coverage is counted from 2014 to the latest
+date, so a series that only starts in 2022 shows low coverage. Under ~70% →
+drop that series. The `variety` column shows which variety each series uses.
 
 Start with one series (potato at Deesa Veg Yard), get it clean, then add the rest.
 
@@ -77,9 +82,12 @@ Run `python -m krishibhav load-datagov` to load all saved days into your databas
 python -m krishibhav fetch-weather
 ```
 
-Pulls daily rainfall, temperature and evapotranspiration since 2015 for Deesa,
+Pulls daily rainfall, temperature and evapotranspiration since 2014 for Deesa,
 Palanpur, Dhanera and Unjha, plus a 16-day forecast (Open-Meteo, no key needed).
-Re-running only fetches the new days. Coordinates are in `krishibhav/config.py`;
+Re-running fetches the new days plus the last 10 (Open-Meteo corrects recent
+days). Every forecast is kept in `weather_forecast` with its issue date, so
+back-tests can use what was forecast at the time; run this daily to build that
+history. Coordinates are in `krishibhav/config.py`;
 check them on a map and add growing areas if you want.
 
 ## 5. Build the modelling dataset
@@ -89,9 +97,12 @@ python -m krishibhav build-series
 ```
 
 Writes `data/processed/daily_series.csv`: one row per day per market and
-commodity. Several varieties on the same day are combined into one price
-(weighted by arrivals). Gaps of up to 3 days (Sundays, holidays) are filled and
-marked `filled=True`; longer gaps stay empty.
+commodity, using one variety per series (the one reported on the most days, or
+the one you set in `MAIN_VARIETY` in `config.py`; merge spellings with
+`VARIETY_ALIASES`). Several grades on the same day are combined into one price
+(weighted by arrivals). Prices more than 3x away from the surrounding days are
+treated as typos and blanked. Gaps of up to 3 days (Sundays, holidays) are
+filled and marked `filled=True`; longer gaps stay empty.
 
 ## Commands
 
@@ -116,7 +127,7 @@ krishibhav/
   ingest.py     loads downloaded files and saved API responses
   datagov.py    data.gov.in daily fetcher with retries
   weather.py    Open-Meteo history + forecast
-  series.py     one clean daily series per market and commodity
+  series.py     one variety, one clean daily series per market and commodity
   report.py     coverage table and charts
 tests/          50 tests on fake Agmarknet/API data
 ```

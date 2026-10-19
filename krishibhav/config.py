@@ -38,7 +38,8 @@ DATAGOV_API_KEY = os.getenv("DATAGOV_API_KEY", "")
 DATAGOV_RESOURCE_ID = os.getenv("DATAGOV_RESOURCE_ID", "9ef84268-d588-465a-a308-a864a43d0070")
 
 STATE = "Gujarat"
-HISTORY_START = "2015-01-01"
+# One year before the 2015 training start, so the 365-day lag exists from day one.
+HISTORY_START = "2014-01-01"
 
 # Canonical commodity name -> lowercase words that identify it in raw files.
 # Each alias must appear as a whole word ("amaranth" does not match "Amaranthus").
@@ -61,6 +62,16 @@ NOT_COMMODITY: dict[str, list[str]] = {
     "Castor Seed": ["oil", "cake"],
     "Groundnut": ["oil", "cake", "seed", "split", "kernel", "kernels"],
 }
+
+# Variety spellings to merge, per commodity: canonical name -> whole-word aliases.
+# Fill this in after `report` shows the real names in your data, e.g.
+#   "Potato": {"Desi": ["desi", "local"], "Jyoti": ["jyoti"]},
+VARIETY_ALIASES: dict[str, dict[str, list[str]]] = {}
+
+# The daily series uses ONE variety per market and commodity, so a change in the
+# day's variety mix is not mistaken for a price move. By default the variety
+# reported on the most days is used; set one here to choose it yourself.
+MAIN_VARIETY: dict[str, str] = {}
 
 # Canonical market name -> role. Raw names are normalised first
 # (e.g. "Deesa(Deesa Veg Yard)" -> "Deesa Veg Yard"), then matched here.
@@ -92,3 +103,7 @@ WEATHER_DAILY_VARS = [
 
 # Forward-fill a missing trading day only if the gap is this short.
 MAX_FILL_DAYS = 3
+
+# A modal price this many times above (or below) the median of the 15 reported
+# days around it is treated as a bad entry (e.g. Rs/kg typed as Rs/quintal).
+SPIKE_RATIO = 3.0

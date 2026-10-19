@@ -1,4 +1,9 @@
-"""Daily weather from Open-Meteo (free, no API key): history + 16-day forecast."""
+"""Daily weather from Open-Meteo (free, no API key): history + 16-day forecast.
+
+History goes to weather_daily. Each run re-fetches the last REFETCH_DAYS days,
+because the newest days are early estimates that Open-Meteo later corrects.
+Forecasts go to weather_forecast, one set per issue date (nothing is overwritten).
+"""
 from __future__ import annotations
 
 import logging
@@ -13,15 +18,17 @@ log = logging.getLogger(__name__)
 ARCHIVE = "https://archive-api.open-meteo.com/v1/archive"
 FORECAST = "https://api.open-meteo.com/v1/forecast"
 ARCHIVE_LAG_DAYS = 6   # the reanalysis archive runs a few days behind today
+REFETCH_DAYS = 10      # re-download this many recent history days on every run
 
 
-def _rows(payload: dict, location: str, kind: str) -> list[dict]:
+def _rows(payload: dict, location: str, **extra) -> list[dict]:
+    """One dict per day; `extra` adds kind="history" or issued=<date>."""
     daily = payload.get("daily") or {}
     days = daily.get("time", [])
     fetched = db.now_utc()
     rows = []
     for i, d in enumerate(days):
-        row = {"location": location, "date": date.fromisoformat(d), "kind": kind, "fetched_at": fetched}
+        row = {"location": location, "date": date.fromisoformat(d), "fetched_at": fetched, **extra}
         for var in config.WEATHER_DAILY_VARS:
             values = daily.get(var) or []
             row[var] = values[i] if i < len(values) else None
@@ -53,15 +60,15 @@ def fetch_weather(history: bool = True, forecast: bool = True) -> int:
                 "daily": ",".join(config.WEATHER_DAILY_VARS)}
         if history:
             last = _last_history_date(engine, name)
-            start = (last + timedelta(days=1)) if last else date.fromisoformat(config.HISTORY_START)
+            start = (last - timedelta(days=REFETCH_DAYS - 1)) if last else date.fromisoformat(config.HISTORY_START)
             if start <= end:
                 payload = _call(ARCHIVE, {**base, "start_date": start.isoformat(), "end_date": end.isoformat()})
-                rows = _rows(payload, name, "history")
+                rows = _rows(payload, name, kind="history")
                 total += db.upsert(engine, db.weather_daily, rows, db.WEATHER_KEY)
                 log.info("%s: %d history days (%s to %s)", name, len(rows), start, end)
         if forecast:
             payload = _call(FORECAST, {**base, "forecast_days": 16})
-            rows = _rows(payload, name, "forecast")
-            total += db.upsert(engine, db.weather_daily, rows, db.WEATHER_KEY)
+            rows = _rows(payload, name, issued=date.today())
+            total += db.upsert(engine, db.weather_forecast, rows, db.FORECAST_KEY)
             log.info("%s: %d forecast days", name, len(rows))
     return total

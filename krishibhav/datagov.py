@@ -38,6 +38,13 @@ def _get(session: requests.Session, url: str, params: dict, tries: int = 4) -> d
     raise RuntimeError("unreachable")
 
 
+def _other_states(records: list[dict], state: str) -> set[str]:
+    """States in the records that are not the one asked for (the API silently
+    ignores a filter name it does not know and returns all of India)."""
+    found = {str(r.get("state") or r.get("State") or "").strip().lower() for r in records}
+    return found - {"", state.lower()}
+
+
 def fetch_state(api_key: str, state: str = config.STATE, session: requests.Session | None = None
                 ) -> list[dict]:
     if not api_key:
@@ -53,6 +60,11 @@ def fetch_state(api_key: str, state: str = config.STATE, session: requests.Sessi
                       "offset": offset, filter_key: state}
             payload = _get(session, url, params)
             batch = payload.get("records", []) or []
+            if offset == 0 and _other_states(batch, state):
+                log.warning("data.gov.in ignored %s (returned other states too); trying the next filter",
+                            filter_key)
+                records = []
+                break
             records.extend(batch)
             total = int(payload.get("total", 0) or 0)
             offset += PAGE

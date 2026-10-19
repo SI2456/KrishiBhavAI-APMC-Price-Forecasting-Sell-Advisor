@@ -21,7 +21,8 @@ from . import config
 
 log = logging.getLogger(__name__)
 
-REQUIRED = ["date", "market", "commodity", "modal_price"]
+REQUIRED = ["date", "market", "commodity"]
+VALUE_COLS = ["modal_price", "arrivals_tonnes"]   # a file needs at least one of these
 PRICE_COLS = ["min_price", "max_price", "modal_price"]
 OUTPUT_COLS = [
     "date", "state", "district", "market", "commodity", "variety", "grade",
@@ -78,7 +79,7 @@ def norm_market(raw: object) -> str:
     return lookup.get(name.lower(), name)
 
 
-def _has_word(text: str, phrase: str) -> bool:
+def has_word(text: str, phrase: str) -> bool:
     return re.search(rf"\b{re.escape(phrase)}\b", text) is not None
 
 
@@ -87,8 +88,8 @@ def norm_commodity(raw: object) -> str | None:
     in config.NOT_COMMODITY ('Sweet Potato', 'Groundnut Oil') are rejected."""
     s = str(raw).lower()
     for canon, aliases in config.COMMODITIES.items():
-        if any(_has_word(s, a) for a in aliases):
-            if any(_has_word(s, x) for x in config.NOT_COMMODITY.get(canon, [])):
+        if any(has_word(s, a) for a in aliases):
+            if any(has_word(s, x) for x in config.NOT_COMMODITY.get(canon, [])):
                 return None
             return canon
     return None
@@ -125,7 +126,7 @@ def _find_header(raw: pd.DataFrame) -> int | None:
     is one cell, so it does not count)."""
     for i in range(min(len(raw), 25)):
         targets = {canon_col(v) for v in raw.iloc[i].tolist()} - {None}
-        if "modal_price" in targets and len(targets) >= 2:
+        if targets & set(VALUE_COLS) and len(targets) >= 2:
             return i
     return None
 
@@ -151,7 +152,7 @@ def read_table(path: Path) -> pd.DataFrame:
         if isinstance(raw.columns, pd.MultiIndex) or _find_header(raw) is None:
             # read_html may already have used the header row as columns
             cols = [" ".join(map(str, c)) if isinstance(c, tuple) else str(c) for c in raw.columns]
-            if any("modal" in c.lower() for c in cols):
+            if {canon_col(c) for c in cols} & set(VALUE_COLS):
                 raw.columns = cols
                 return raw.reset_index(drop=True)
             continue
@@ -159,7 +160,7 @@ def read_table(path: Path) -> pd.DataFrame:
         table = raw.iloc[h + 1 :].copy()
         table.columns = [str(c) for c in raw.iloc[h].tolist()]
         return table.reset_index(drop=True)
-    raise ValueError(f"No price table found in {path.name} (no 'Modal Price' header)")
+    raise ValueError(f"No price table found in {path.name} (no 'Modal Price' or 'Arrivals' header)")
 
 
 # ---------------------------------------------------------------- cleaning
@@ -170,11 +171,13 @@ class CleanReport:
     rows_out: int = 0
     dropped: dict = field(default_factory=dict)
     modal_outside_range: int = 0
+    min_max_swapped: int = 0
 
     def line(self) -> str:
         drops = ", ".join(f"{k}: {v}" for k, v in self.dropped.items() if v) or "none"
         return (f"{self.file}: {self.rows_in} rows in, {self.rows_out} kept "
-                f"(dropped {drops}; modal outside min-max: {self.modal_outside_range})")
+                f"(dropped {drops}; min/max swapped: {self.min_max_swapped}; "
+                f"modal outside min-max: {self.modal_outside_range})")
 
 
 def normalise(df: pd.DataFrame, source: str, file_hint: str = "", keep_all: bool = False
@@ -203,6 +206,8 @@ def normalise(df: pd.DataFrame, source: str, file_hint: str = "", keep_all: bool
                 break
 
     missing = [c for c in REQUIRED if c not in df.columns]
+    if not any(c in df.columns for c in VALUE_COLS):
+        missing.append("modal_price or arrivals_tonnes")
     if missing:
         raise ValueError(
             f"{rep.file}: missing columns {missing}. Columns found: {list(df.columns)}. "
@@ -210,7 +215,7 @@ def normalise(df: pd.DataFrame, source: str, file_hint: str = "", keep_all: bool
             "or export the report with those columns."
         )
 
-    for col in ["state", "district", "variety", "grade", "arrivals_tonnes", "min_price", "max_price"]:
+    for col in ["state", "district", "variety", "grade", "arrivals_tonnes", *PRICE_COLS]:
         if col not in df.columns:
             df[col] = pd.NA
 
@@ -225,9 +230,14 @@ def normalise(df: pd.DataFrame, source: str, file_hint: str = "", keep_all: bool
     df["grade"] = clean_text(df["grade"]).str.upper()
     for col in PRICE_COLS:
         df[col] = to_number(df[col])
-    df["arrivals_tonnes"] = pd.to_numeric(
+    arrivals = pd.to_numeric(
         df["arrivals_tonnes"].astype("string").str.replace(",", "", regex=False), errors="coerce"
     ).astype("float64")
+    df["arrivals_tonnes"] = arrivals.mask(arrivals < 0)
+    # Some rows have min and max typed the wrong way round.
+    flipped = df["min_price"] > df["max_price"]
+    df.loc[flipped, ["min_price", "max_price"]] = df.loc[flipped, ["max_price", "min_price"]].to_numpy()
+    rep.min_max_swapped = int(flipped.sum())
     df["date"] = to_date(df["date"])
     df["source"] = source
 
@@ -235,8 +245,10 @@ def normalise(df: pd.DataFrame, source: str, file_hint: str = "", keep_all: bool
     df = df[df["date"].notna()]
     rep.dropped["no date"] = before - len(df)
     before = len(df)
-    df = df[df["modal_price"].notna()]
-    rep.dropped["no modal price"] = before - len(df)
+    # Rows with arrivals but no price are kept: a separate arrivals report
+    # merges into the price rows with the same key when loaded.
+    df = df[df["modal_price"].notna() | df["arrivals_tonnes"].notna()]
+    rep.dropped["no price or arrivals"] = before - len(df)
     before = len(df)
     df = df[df["commodity"].notna() & (df["commodity"] != "")]
     rep.dropped["other commodity"] = before - len(df)

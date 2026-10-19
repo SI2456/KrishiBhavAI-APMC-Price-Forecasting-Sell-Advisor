@@ -46,22 +46,43 @@ mandi_prices = Table(
 )
 PRICE_KEY = ["date", "market", "commodity", "variety", "grade"]
 
+def _weather_cols() -> list[Column]:
+    return [
+        Column("precipitation_sum", Float),          # mm
+        Column("temperature_2m_max", Float),         # deg C
+        Column("temperature_2m_min", Float),
+        Column("temperature_2m_mean", Float),
+        Column("et0_fao_evapotranspiration", Float),  # mm
+        Column("fetched_at", DateTime),
+    ]
+
+
+# Observed weather (ERA5 reanalysis). kind is always "history".
 weather_daily = Table(
     "weather_daily",
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("location", String(64), nullable=False),
     Column("date", Date, nullable=False),
-    Column("kind", String(16), nullable=False),  # history | forecast
-    Column("precipitation_sum", Float),          # mm
-    Column("temperature_2m_max", Float),         # deg C
-    Column("temperature_2m_min", Float),
-    Column("temperature_2m_mean", Float),
-    Column("et0_fao_evapotranspiration", Float),  # mm
-    Column("fetched_at", DateTime),
+    Column("kind", String(16), nullable=False),
+    *_weather_cols(),
     UniqueConstraint("location", "date", "kind", name="uq_weather_row"),
 )
 WEATHER_KEY = ["location", "date", "kind"]
+
+# Every 16-day forecast is kept with the day it was issued, so back-tests can use
+# the forecast that was known at the time instead of the weather that happened.
+weather_forecast = Table(
+    "weather_forecast",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("location", String(64), nullable=False),
+    Column("issued", Date, nullable=False),
+    Column("date", Date, nullable=False),
+    *_weather_cols(),
+    UniqueConstraint("location", "issued", "date", name="uq_forecast_row"),
+)
+FORECAST_KEY = ["location", "issued", "date"]
 
 
 def get_engine(url: str | None = None) -> Engine:
