@@ -1,0 +1,257 @@
+"""Tests for the data pipeline. Run: pytest -q
+
+They use small fake files shaped like real Agmarknet / data.gov.in exports,
+so no internet or API key is needed.
+"""
+from __future__ import annotations
+
+import json
+from datetime import date
+
+import pandas as pd
+import pytest
+from sqlalchemy import select
+
+from krishibhav import clean, config, datagov, db, ingest, series, weather
+
+HEADER = ["Sl no.", "District Name", "Market Name", "Commodity", "Variety", "Grade",
+          "Min Price (Rs./Quintal)", "Max Price (Rs./Quintal)", "Modal Price (Rs./Quintal)", "Price Date"]
+
+
+@pytest.fixture
+def env(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "DATA", tmp_path)
+    monkeypatch.setattr(config, "RAW_AGMARKNET", tmp_path / "raw" / "agmarknet")
+    monkeypatch.setattr(config, "RAW_DATAGOV", tmp_path / "raw" / "datagov")
+    monkeypatch.setattr(config, "PROCESSED", tmp_path / "processed")
+    monkeypatch.setattr(config, "REPORTS", tmp_path / "reports")
+    monkeypatch.setattr(config, "DATABASE_URL", f"sqlite:///{(tmp_path / 'test.db').as_posix()}")
+    config.RAW_AGMARKNET.mkdir(parents=True)
+    config.RAW_DATAGOV.mkdir(parents=True)
+    return tmp_path
+
+
+def agmarknet_xlsx(path):
+    """Two title rows above the header, like the portal's Excel export."""
+    rows = [
+        ["Commodity wise price report, Gujarat"] + [""] * 9,
+        [""] * 10,
+        HEADER,
+        [1, "Banaskantha", "Deesa(Deesa Veg Yard)", "Potato", "Desi", "FAQ", "1,000", "1,400", "1,200", "17 Oct 2026"],
+        [2, "Banaskantha", "Deesa(Deesa Veg Yard)", "Potato", "Jyoti", "FAQ", "900", "1,300", "1,100", "17 Oct 2026"],
+        [3, "Banaskantha", "Deesa(Deesa Veg Yard)", "Potato", "Desi", "FAQ", "0", "0", "0", "16 Oct 2026"],
+        [4, "Rajkot", "Rajkot", "Potato", "Desi", "FAQ", "800", "1,000", "900", "17 Oct 2026"],
+        [5, "Banaskantha", "Deesa", "Onion", "Red", "FAQ", "800", "1,000", "900", "17 Oct 2026"],
+    ]
+    pd.DataFrame(rows).to_excel(path, header=False, index=False)
+
+
+# ------------------------------------------------------------------ cleaning
+@pytest.mark.parametrize("raw, expected", [
+    ("Modal Price (Rs./Quintal)", "modal_price"),
+    ("Min Price (Rs./Quintal)", "min_price"),
+    ("max_price", "max_price"),
+    ("Arrival_Date", "date"),
+    ("Price Date", "date"),
+    ("Arrivals (Tonnes)", "arrivals_tonnes"),
+    ("arrivals_unit", None),
+    ("Market Name", "market"),
+    ("market_center", "market"),
+    ("market_code", None),
+    ("Commodity", "commodity"),
+    ("commodity_type", None),
+    ("Sl no.", None),
+    ("state_id", None),
+    ("Market ID", None),
+    ("commodity_id", None),
+    ("market_name", "market"),
+])
+def test_canon_col(raw, expected):
+    assert clean.canon_col(raw) == expected
+
+
+@pytest.mark.parametrize("raw, expected", [
+    ("Deesa(Deesa Veg Yard)", "Deesa Veg Yard"),
+    ("DEESA (BHILDI)", "Deesa Bhildi"),
+    ("Deesa APMC", "Deesa"),
+    ("palanpur", "Palanpur"),
+])
+def test_norm_market(raw, expected):
+    assert clean.norm_market(raw) == expected
+
+
+def test_norm_commodity():
+    assert clean.norm_commodity("Potato(Desi)") == "Potato"
+    assert clean.norm_commodity("Castor Seed") == "Castor Seed"
+    assert clean.norm_commodity("Onion") is None
+
+
+@pytest.mark.parametrize("raw, expected", [
+    ("Sweet Potato", None),
+    ("Amaranthus", None),                # leafy vegetable, not rajgira grain
+    ("Groundnut Oil", None),
+    ("Groundnut Seed", None),            # kernels
+    ("Groundnut (Split)", None),
+    ("Castor Oil", None),
+    ("Groundnut pods (raw)", "Groundnut"),
+    ("Rajgir", "Rajgira"),
+    ("Rajgira", "Rajgira"),
+    ("Cumin Seed(Jeera)", "Cumin"),
+    ("Bajra(Pearl Millet/Cumbu)", "Bajra"),
+])
+def test_norm_commodity_other_products(raw, expected):
+    assert clean.norm_commodity(raw) == expected
+
+
+@pytest.mark.parametrize("raw, expected", [
+    ("2020-02-01", date(2020, 2, 1)),            # ISO: never day first
+    ("2026-10-05 00:00:00", date(2026, 10, 5)),  # Excel date cell read as text
+    ("2020/2/1", date(2020, 2, 1)),
+    ("05/10/2026", date(2026, 10, 5)),           # Indian day first
+    ("05-10-2026", date(2026, 10, 5)),
+    ("17 Oct 2026", date(2026, 10, 17)),
+])
+def test_to_date(raw, expected):
+    assert clean.to_date(pd.Series([raw])).iloc[0] == expected
+
+
+def test_to_date_bad_values():
+    out = clean.to_date(pd.Series(["", None, "junk", "2020-13-01"]))
+    assert out.isna().all()
+
+
+def test_xlsx_with_real_date_cells(env):
+    path = config.RAW_AGMARKNET / "castor_deesa_2026.xlsx"
+    pd.DataFrame({"Market Name": ["Deesa", "Deesa"], "Commodity": ["Castor Seed"] * 2,
+                  "Modal Price": [6300, 6350],
+                  "Price Date": [pd.Timestamp("2026-10-05"), pd.Timestamp("2026-10-06")]}
+                 ).to_excel(path, index=False)
+    df, _ = clean.normalise(clean.read_table(path), source="agmarknet_file", file_hint=path.stem)
+    assert df["date"].tolist() == [date(2026, 10, 5), date(2026, 10, 6)]
+
+
+def test_ceda_style_id_columns(env):
+    """ID columns come before name columns; the names must win."""
+    df = pd.DataFrame([["2020-02-01", "24", "Gujarat", "445", "Banaskantha", "1001", "Deesa",
+                        "23", "Potato", "Desi", "900", "1100", "1000", "50"]],
+                      columns=["date", "state_id", "state_name", "district_id", "district_name",
+                               "market_id", "market_name", "commodity_id", "commodity_name",
+                               "variety", "min_price", "max_price", "modal_price", "arrivals"])
+    out, _ = clean.normalise(df, source="ceda_file", file_hint="ceda_potato")
+    assert len(out) == 1
+    row = out.iloc[0]
+    assert (row["market"], row["commodity"], row["district"]) == ("Deesa", "Potato", "Banaskantha")
+    assert row["date"] == date(2020, 2, 1)
+
+
+def test_xlsx_with_title_rows(env):
+    path = config.RAW_AGMARKNET / "potato_deesa_2026.xlsx"
+    agmarknet_xlsx(path)
+    df, rep = clean.normalise(clean.read_table(path), source="agmarknet_file", file_hint=path.stem)
+    assert len(df) == 2                                   # zero-price, Rajkot and onion rows dropped
+    assert set(df["market"]) == {"Deesa Veg Yard"}
+    assert df["modal_price"].tolist() == [1200.0, 1100.0]
+    assert df["date"].iloc[0] == date(2026, 10, 17)
+    assert rep.dropped["no modal price"] == 1
+
+
+def test_html_disguised_as_xls(env):
+    table = pd.DataFrame([[1, "Banaskantha", "Deesa", "Castor Seed", "Castor", "FAQ",
+                           "6,100", "6,450", "6,385", "17/10/2026"]], columns=HEADER)
+    path = config.RAW_AGMARKNET / "castor_report.xls"
+    path.write_text(table.to_html(index=False), encoding="utf-8")
+    df, _ = clean.normalise(clean.read_table(path), source="agmarknet_file", file_hint=path.stem)
+    assert df.loc[0, "commodity"] == "Castor Seed"
+    assert df.loc[0, "modal_price"] == 6385.0
+
+
+def test_commodity_and_market_from_file_name(env):
+    path = config.RAW_AGMARKNET / "groundnut_deesa-bhildi_2020.csv"
+    pd.DataFrame({"Price Date": ["01/02/2020", "03/02/2020"], "Variety": ["Bold", "Bold"],
+                  "Modal Price": ["5,500", "5,600"]}).to_csv(path, index=False)
+    df, _ = clean.normalise(clean.read_table(path), source="agmarknet_file", file_hint=path.stem)
+    assert set(df["commodity"]) == {"Groundnut"}
+    assert set(df["market"]) == {"Deesa Bhildi"}
+
+
+# ------------------------------------------------------------------ database
+def test_load_files_and_coalesce_upsert(env):
+    agmarknet_xlsx(config.RAW_AGMARKNET / "potato_deesa_2026.xlsx")
+    # A separate arrivals file for the same keys (prices left blank)
+    pd.DataFrame({
+        "Market Name": ["Deesa(Deesa Veg Yard)"], "Commodity": ["Potato"], "Variety": ["Desi"],
+        "Grade": ["FAQ"], "Arrivals (Tonnes)": ["350"], "Modal Price": ["1200"], "Price Date": ["17-10-2026"],
+    }).to_csv(config.RAW_AGMARKNET / "zz_potato_arrivals.csv", index=False)
+
+    assert ingest.load_files() == 3
+    engine = db.get_engine()
+    with engine.connect() as conn:
+        rows = conn.execute(select(db.mandi_prices)).mappings().all()
+    assert len(rows) == 2                                 # same key merged, not duplicated
+    desi = next(r for r in rows if r["variety"] == "Desi")
+    assert desi["arrivals_tonnes"] == 350.0
+    assert desi["min_price"] == 1000.0                    # not blanked by the arrivals file
+
+    assert ingest.load_files() == 3                       # re-running is safe
+    with engine.connect() as conn:
+        assert len(conn.execute(select(db.mandi_prices)).all()) == 2
+
+
+def test_series_fills_short_gaps_only(env):
+    rows = []
+    for d, price in [("2026-01-01", 100), ("2026-01-03", 110), ("2026-01-10", 120)]:
+        rows.append({"date": pd.Timestamp(d), "market": "Deesa", "commodity": "Castor Seed",
+                     "modal_price": price, "min_price": price - 5, "max_price": price + 5,
+                     "arrivals_tonnes": None})
+    out = series.fill_calendar(series.combine_daily(pd.DataFrame(rows)), max_fill=3)
+    by_day = out.set_index("date")
+    assert by_day.loc["2026-01-02", "modal_price"] == 100 and by_day.loc["2026-01-02", "filled"]
+    assert by_day.loc["2026-01-06", "modal_price"] == 110      # 3 days after Jan 3
+    assert pd.isna(by_day.loc["2026-01-07", "modal_price"])    # gap too long, left empty
+    assert not by_day.loc["2026-01-10", "filled"]
+
+
+def test_arrival_weighted_price():
+    df = pd.DataFrame({
+        "date": [pd.Timestamp("2026-01-01")] * 2, "market": ["Deesa"] * 2, "commodity": ["Potato"] * 2,
+        "modal_price": [1000.0, 1300.0], "min_price": [900.0, 1200.0], "max_price": [1100.0, 1400.0],
+        "arrivals_tonnes": [300.0, 100.0],
+    })
+    out = series.combine_daily(df)
+    assert out.loc[0, "modal_price"] == 1075.0            # (1000*300 + 1300*100) / 400
+
+
+# ------------------------------------------------------------------ APIs (no network)
+def test_datagov_pagination_and_filter_fallback(env, monkeypatch):
+    calls = []
+    record = {"state": "Gujarat", "district": "Banaskantha", "market": "Deesa", "commodity": "Castor Seed",
+              "variety": "Castor", "grade": "FAQ", "arrival_date": "17/10/2026",
+              "min_price": "6100", "max_price": "6450", "modal_price": "6385"}
+
+    def fake_get(session, url, params, tries=4):
+        calls.append(params)
+        if "filters[state.keyword]" in params:          # first spelling returns nothing
+            return {"records": [], "total": 0}
+        if params["offset"] == 0:
+            return {"records": [record] * 1000, "total": 1001}
+        return {"records": [dict(record, market="Palanpur")], "total": 1001}
+
+    monkeypatch.setattr(datagov, "_get", fake_get)
+    monkeypatch.setattr(config, "DATAGOV_API_KEY", "test-key")
+    assert len(datagov.fetch_state("test-key")) == 1001
+    assert [c["offset"] for c in calls if "filters[state]" in c] == [0, 1000]
+
+    n = datagov.fetch_today()
+    assert n == 2                                          # 1000 identical rows dedupe to one + Palanpur
+    saved = list(config.RAW_DATAGOV.glob("*.json"))
+    assert len(saved) == 1 and len(json.loads(saved[0].read_text())["records"]) == 1001
+    assert ingest.load_datagov_raw() == 2
+
+
+def test_weather_rows():
+    payload = {"daily": {"time": ["2026-10-01", "2026-10-02"],
+                         "precipitation_sum": [0.0, 12.5], "temperature_2m_max": [34.1, 31.0]}}
+    rows = weather._rows(payload, "Deesa", "history")
+    assert rows[1]["precipitation_sum"] == 12.5
+    assert rows[1]["temperature_2m_min"] is None
+    assert rows[0]["date"] == date(2026, 10, 1)

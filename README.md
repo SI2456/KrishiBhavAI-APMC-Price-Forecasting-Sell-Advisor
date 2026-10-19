@@ -21,7 +21,7 @@ copy .env.example .env
 pytest -q
 ```
 
-On Mac/Linux use `source .venv/bin/activate` and `cp`. All 26 tests should pass.
+On Mac/Linux use `source .venv/bin/activate` and `cp`. All 50 tests should pass.
 They use fake files, so no internet is needed.
 
 ## 2. Download historical prices (one evening of clicking)
@@ -118,7 +118,7 @@ krishibhav/
   weather.py    Open-Meteo history + forecast
   series.py     one clean daily series per market and commodity
   report.py     coverage table and charts
-tests/          26 tests on fake Agmarknet/API data
+tests/          50 tests on fake Agmarknet/API data
 ```
 
 ## If something breaks
