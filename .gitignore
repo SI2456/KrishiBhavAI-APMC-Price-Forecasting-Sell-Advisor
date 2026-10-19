@@ -10,6 +10,6 @@ data/processed/
 reports/
 
 # Big manual downloads: keep them out of git (share via Drive if needed).
-# The small daily data.gov.in JSON files ARE committed (data/raw/datagov/).
+# The small daily JSON files ARE committed (data/raw/datagov/, data/raw/weather/).
 data/raw/agmarknet/*
 !data/raw/agmarknet/README.md

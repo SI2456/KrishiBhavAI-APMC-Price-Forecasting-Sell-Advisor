@@ -23,6 +23,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "DATA", tmp_path)
     monkeypatch.setattr(config, "RAW_AGMARKNET", tmp_path / "raw" / "agmarknet")
     monkeypatch.setattr(config, "RAW_DATAGOV", tmp_path / "raw" / "datagov")
+    monkeypatch.setattr(config, "RAW_WEATHER_FORECAST", tmp_path / "raw" / "weather" / "forecast")
     monkeypatch.setattr(config, "PROCESSED", tmp_path / "processed")
     monkeypatch.setattr(config, "REPORTS", tmp_path / "reports")
     monkeypatch.setattr(config, "DATABASE_URL", f"sqlite:///{(tmp_path / 'test.db').as_posix()}")
@@ -338,6 +339,31 @@ def test_weather_refetches_recent_days_and_keeps_forecasts(env, monkeypatch):
     assert len(history) == 15                                              # Oct 1 to 15, no duplicates
     assert len(forecasts) == 6                                             # 2 issues x 3 days, both kept
     assert {str(r["issued"]) for r in forecasts} == {"2026-10-20", "2026-10-21"}
+
+    saved = sorted(p.name for p in config.RAW_WEATHER_FORECAST.glob("*.json"))
+    assert saved == ["2026-10-20.json", "2026-10-21.json"]                 # raw files kept too
+
+
+def test_forecast_raw_only_then_load(env, monkeypatch):
+    """The GitHub job only saves JSON; load-weather later puts it in the database."""
+    def fake_call(url, params):
+        assert url == weather.FORECAST                                     # no history download
+        return {"daily": {"time": ["2026-10-20", "2026-10-21"], "precipitation_sum": [0.0, 4.2]}}
+
+    monkeypatch.setattr(weather, "_call", fake_call)
+    monkeypatch.setattr(config, "WEATHER_LOCATIONS", {"Deesa": (24.26, 72.19), "Unjha": (23.80, 72.39)})
+
+    assert weather.fetch_weather(load=False) == 0
+    assert not (env / "test.db").exists()                                  # database untouched
+    (path,) = config.RAW_WEATHER_FORECAST.glob("*.json")
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert set(saved["locations"]) == {"Deesa", "Unjha"}
+
+    assert weather.load_forecasts_raw() == 4
+    assert weather.load_forecasts_raw() == 4                               # re-loading is safe
+    with db.get_engine().connect() as conn:
+        rows = conn.execute(select(db.weather_forecast)).mappings().all()
+    assert len(rows) == 4 and {str(r["issued"]) for r in rows} == {saved["issued"]}
 
 
 # ------------------------------------------------------------------ APIs (no network)

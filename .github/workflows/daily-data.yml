@@ -1,4 +1,5 @@
 # Saves today's Gujarat mandi prices from data.gov.in into data/raw/datagov/
+# and today's 16-day weather forecast into data/raw/weather/forecast/
 # every evening, even when your laptop is off.
 # Setup: GitHub repo -> Settings -> Secrets and variables -> Actions ->
 #        New repository secret: DATAGOV_API_KEY
@@ -25,10 +26,14 @@ jobs:
         env:
           DATAGOV_API_KEY: ${{ secrets.DATAGOV_API_KEY }}
         run: python -m krishibhav fetch-today --raw-only
+      - name: Save today's weather forecast
+        if: success() || failure()     # run even if data.gov.in was down
+        run: python -m krishibhav fetch-weather --raw-only
       - name: Commit new data
+        if: success() || failure()     # keep whichever of the two worked
         run: |
           git config user.name "krishibhav-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add data/raw/datagov
-          git diff --cached --quiet || git commit -m "data: mandi prices $(date +%F)"
+          git add -A data/raw
+          git diff --cached --quiet || git commit -m "data: mandi prices and weather forecast $(date +%F)"
           git push

@@ -73,7 +73,8 @@ latest day, so these files become your live history).
 
 **Automate it for free:** push this folder to a GitHub repo, add the key as a
 repo secret named `DATAGOV_API_KEY`, and `.github/workflows/daily-data.yml`
-saves the data every evening at 20:45 IST, even with your laptop off.
+saves the prices and the weather forecast every evening at 20:45 IST, even
+with your laptop off. Run `git pull` before working so you have the new files.
 Run `python -m krishibhav load-datagov` to load all saved days into your database.
 
 ## 4. Weather
@@ -86,8 +87,10 @@ Pulls daily rainfall, temperature and evapotranspiration since 2014 for Deesa,
 Palanpur, Dhanera and Unjha, plus a 16-day forecast (Open-Meteo, no key needed).
 Re-running fetches the new days plus the last 10 (Open-Meteo corrects recent
 days). Every forecast is kept in `weather_forecast` with its issue date, so
-back-tests can use what was forecast at the time; run this daily to build that
-history. Coordinates are in `krishibhav/config.py`;
+back-tests can use what was forecast at the time. Each forecast is first saved
+as `data/raw/weather/forecast/<date>.json`; the GitHub job saves one every
+evening (old forecasts cannot be downloaded later, so these files are the
+record). After `git pull`, run `python -m krishibhav load-weather` to load them. Coordinates are in `krishibhav/config.py`;
 check them on a map and add growing areas if you want.
 
 ## 5. Build the modelling dataset
@@ -112,7 +115,8 @@ filled and marked `filled=True`; longer gaps stay empty.
 | `load-files [--keep-all]` | Clean and load everything in `data/raw/agmarknet` |
 | `fetch-today [--raw-only]` | Today's Gujarat prices from data.gov.in |
 | `load-datagov` | Re-load all saved daily API responses |
-| `fetch-weather [--forecast-only]` | Weather history and forecast |
+| `fetch-weather [--forecast-only] [--raw-only]` | Weather history and forecast |
+| `load-weather` | Re-load all saved forecast files |
 | `build-series` | Write `data/processed/daily_series.csv` |
 | `report` | Coverage table and charts in `reports/` |
 | `daily` | `fetch-today` + `fetch-weather` + `build-series` |

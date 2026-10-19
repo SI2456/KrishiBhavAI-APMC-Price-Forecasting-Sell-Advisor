@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 RAW_AGMARKNET = DATA / "raw" / "agmarknet"   # put downloaded Agmarknet / CEDA files here
 RAW_DATAGOV = DATA / "raw" / "datagov"       # daily API responses are saved here as JSON
+RAW_WEATHER_FORECAST = DATA / "raw" / "weather" / "forecast"   # one 16-day forecast file per day
 PROCESSED = DATA / "processed"
 REPORTS = ROOT / "reports"
 

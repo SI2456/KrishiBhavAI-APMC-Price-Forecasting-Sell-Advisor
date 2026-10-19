@@ -5,6 +5,7 @@
   fetch-today     pull today's Gujarat prices from data.gov.in (run every evening)
   load-datagov    re-load all saved data.gov.in responses
   fetch-weather   weather history (incremental) + 16-day forecast from Open-Meteo
+  load-weather    re-load all saved forecast files
   build-series    write data/processed/daily_series.csv
   report          coverage table + price charts in reports/
   daily           fetch-today + fetch-weather + build-series (for the scheduler)
@@ -31,6 +32,9 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("load-datagov")
     p = sub.add_parser("fetch-weather")
     p.add_argument("--forecast-only", action="store_true")
+    p.add_argument("--raw-only", action="store_true",
+                   help="only save today's forecast JSON; skip history and the database")
+    sub.add_parser("load-weather")
     sub.add_parser("build-series")
     sub.add_parser("report")
     sub.add_parser("daily")
@@ -51,7 +55,9 @@ def main(argv: list[str] | None = None) -> int:
     elif args.cmd == "load-datagov":
         ingest.load_datagov_raw()
     elif args.cmd == "fetch-weather":
-        weather.fetch_weather(history=not args.forecast_only)
+        weather.fetch_weather(history=not (args.forecast_only or args.raw_only), load=not args.raw_only)
+    elif args.cmd == "load-weather":
+        weather.load_forecasts_raw()
     elif args.cmd == "build-series":
         series.build_series()
     elif args.cmd == "report":
