@@ -21,6 +21,9 @@ API = "https://api.data.gov.in/resource/{rid}"
 PAGE = 1000
 # data.gov.in has used both spellings for field filters; try them in order.
 STATE_FILTERS = ["filters[state.keyword]", "filters[state]"]
+# data.gov.in leaves requests with the default "python-requests/x.y" agent
+# hanging until they time out, so identify the client explicitly.
+USER_AGENT = "Mozilla/5.0 (compatible; krishibhav/0.1; +https://github.com/SI2456)"
 
 
 def _get(session: requests.Session, url: str, params: dict, tries: int = 4) -> dict:
@@ -50,6 +53,7 @@ def fetch_state(api_key: str, state: str = config.STATE, session: requests.Sessi
     if not api_key:
         raise RuntimeError("Set DATAGOV_API_KEY in .env (free key from data.gov.in → My Account).")
     session = session or requests.Session()
+    session.headers["User-Agent"] = USER_AGENT
     url = API.format(rid=config.DATAGOV_RESOURCE_ID)
 
     for filter_key in STATE_FILTERS:

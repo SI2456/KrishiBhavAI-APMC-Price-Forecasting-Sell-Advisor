@@ -348,6 +348,7 @@ def test_datagov_pagination_and_filter_fallback(env, monkeypatch):
               "min_price": "6100", "max_price": "6450", "modal_price": "6385"}
 
     def fake_get(session, url, params, tries=4):
+        assert "python-requests" not in session.headers["User-Agent"]   # data.gov.in stalls on it
         calls.append(params)
         if "filters[state.keyword]" in params:          # first spelling returns nothing
             return {"records": [], "total": 0}
