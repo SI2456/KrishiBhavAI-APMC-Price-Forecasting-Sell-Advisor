@@ -8,6 +8,7 @@ __pycache__/
 data/krishibhav.db
 data/processed/
 reports/
+logs/
 
 # Big manual downloads: keep them out of git (share via Drive if needed).
 # The small daily JSON files ARE committed (data/raw/datagov/, data/raw/weather/).

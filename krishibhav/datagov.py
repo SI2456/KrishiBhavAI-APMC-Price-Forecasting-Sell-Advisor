@@ -2,7 +2,9 @@
 
 This API only returns the latest reported day, so run it every evening.
 Each response is saved to data/raw/datagov/<date>.json before loading, so the
-history can always be rebuilt with `python -m krishibhav load-datagov`.
+history can always be rebuilt with `python -m krishibhav load-datagov`. <date> is
+the latest arrival date in the response, not the day it was fetched, so a run
+the next morning (laptop was off at night) does not mislabel the file.
 """
 from __future__ import annotations
 
@@ -11,6 +13,7 @@ import logging
 import time
 from datetime import date
 
+import pandas as pd
 import requests
 
 from . import config, db
@@ -82,19 +85,25 @@ def fetch_state(api_key: str, state: str = config.STATE, session: requests.Sessi
     return []
 
 
+def report_date(records: list[dict]) -> str:
+    """Latest arrival date in the records as YYYY-MM-DD (today if none parse)."""
+    raw = [r.get("arrival_date") or r.get("Arrival_Date") for r in records]
+    latest = pd.to_datetime(pd.Series(raw, dtype="string"), format="%d/%m/%Y", errors="coerce").max()
+    return latest.date().isoformat() if pd.notna(latest) else date.today().isoformat()
+
+
 def fetch_today(save_raw: bool = True, load: bool = True) -> int:
     records = fetch_state(config.DATAGOV_API_KEY)
     if not records:
         return 0
     if save_raw:
         config.RAW_DATAGOV.mkdir(parents=True, exist_ok=True)
-        out = config.RAW_DATAGOV / f"{date.today().isoformat()}.json"
+        out = config.RAW_DATAGOV / f"{report_date(records)}.json"
         out.write_text(json.dumps({"records": records}, ensure_ascii=False, indent=1), encoding="utf-8")
         log.info("Saved raw response to %s", out)
     if not load:
         return len(records)
 
-    import pandas as pd
     df, rep = normalise(pd.DataFrame(records), source="datagov", file_hint="datagov")
     engine = db.get_engine()
     db.init_db(engine)

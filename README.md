@@ -83,14 +83,28 @@ Start with one series (potato at Deesa Veg Yard), get it clean, then add the res
 python -m krishibhav fetch-today
 ```
 
-Each day's raw response is saved in `data/raw/datagov/` (the API only gives the
-latest day, so these files become your live history).
+Each day's raw response is saved as `data/raw/datagov/<date>.json`, named by
+the date the prices are for (the API only gives the latest day, so these files
+become your live history).
 
-**Automate it for free:** push this folder to a GitHub repo, add the key as a
-repo secret named `DATAGOV_API_KEY`, and `.github/workflows/daily-data.yml`
-saves the prices and the weather forecast every evening at 20:45 IST, even
-with your laptop off. Run `git pull` before working so you have the new files.
-Run `python -m krishibhav load-datagov` to load all saved days into your database.
+**Automate it on your laptop.** data.gov.in does not answer GitHub's servers
+(they are outside India), so prices are fetched by a Windows scheduled task.
+Set it up once:
+
+```bat
+powershell -ExecutionPolicy Bypass -File scripts\install_task.ps1
+```
+
+It runs `scripts\daily_prices.ps1` at 21:00 and 23:30 (or as soon as the laptop
+is back on): pull, `fetch-today`, commit only `data/raw/datagov`, push. It
+only commits on `main` and does not push if you have your own unpushed
+commits. Check `logs\daily_prices.log` to see what it did. If you miss days,
+`check-markets --refresh` gets them back from the Agmarknet history later.
+
+The GitHub job (`.github/workflows/daily-data.yml`) saves only the weather
+forecast, every evening at 20:45 IST. Run `git pull` before working so you have
+the new files, and `python -m krishibhav load-datagov` to load all saved
+price days into your database.
 
 ## 4. Weather
 
@@ -180,6 +194,7 @@ krishibhav/
   markets.py    check-markets: how often each market reports (Agmarknet history)
   reference.py  MSP, calendar and crop-season tables -> daily flags
 tests/          70 tests on fake Agmarknet/API data and the reference CSVs
+scripts/        daily_prices.ps1 (laptop price job) + install_task.ps1 (schedules it)
 ```
 
 ## If something breaks

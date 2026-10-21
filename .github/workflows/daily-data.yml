@@ -1,13 +1,12 @@
-# Saves today's Gujarat mandi prices from data.gov.in into data/raw/datagov/
-# and today's 16-day weather forecast into data/raw/weather/forecast/
-# every evening, even when your laptop is off.
-# Setup: GitHub repo -> Settings -> Secrets and variables -> Actions ->
-#        New repository secret: DATAGOV_API_KEY
+# Saves today's 16-day weather forecast into data/raw/weather/forecast/ every
+# evening, even when your laptop is off.
+# Mandi prices are NOT fetched here: data.gov.in does not answer GitHub's
+# (US) servers, so they come from the laptop task in scripts/daily_prices.ps1.
 name: daily-data
 
 on:
   schedule:
-    - cron: "15 15 * * *"   # 15:15 UTC = 20:45 IST, after most yards have reported
+    - cron: "15 15 * * *"   # 15:15 UTC = 20:45 IST
   workflow_dispatch:         # lets you run it by hand from the Actions tab
 
 permissions:
@@ -22,18 +21,12 @@ jobs:
         with:
           python-version: "3.14"   # same as local, matches requirements.txt pins
       - run: pip install -r requirements.txt
-      - name: Fetch today's prices
-        env:
-          DATAGOV_API_KEY: ${{ secrets.DATAGOV_API_KEY }}
-        run: python -m krishibhav fetch-today --raw-only
       - name: Save today's weather forecast
-        if: success() || failure()     # run even if data.gov.in was down
         run: python -m krishibhav fetch-weather --raw-only
       - name: Commit new data
-        if: success() || failure()     # keep whichever of the two worked
         run: |
           git config user.name "krishibhav-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add -A data/raw
-          git diff --cached --quiet || git commit -m "data: mandi prices and weather forecast $(date +%F)"
+          git add -A data/raw/weather
+          git diff --cached --quiet || git commit -m "data: weather forecast $(date +%F)"
           git push

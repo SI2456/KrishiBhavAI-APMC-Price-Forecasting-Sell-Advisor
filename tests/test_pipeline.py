@@ -411,6 +411,7 @@ def test_datagov_pagination_and_filter_fallback(env, monkeypatch):
     assert n == 2                                          # 1000 identical rows dedupe to one + Palanpur
     saved = list(config.RAW_DATAGOV.glob("*.json"))
     assert len(saved) == 1 and len(json.loads(saved[0].read_text())["records"]) == 1001
+    assert saved[0].name == "2026-10-17.json"             # named by arrival date, not fetch date
     assert ingest.load_datagov_raw() == 2
 
 
