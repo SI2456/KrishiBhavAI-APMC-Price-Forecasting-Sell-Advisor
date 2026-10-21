@@ -15,6 +15,7 @@ RAW_AGMARKNET = DATA / "raw" / "agmarknet"   # put downloaded Agmarknet / CEDA f
 RAW_DATAGOV = DATA / "raw" / "datagov"       # daily API responses are saved here as JSON
 RAW_WEATHER_FORECAST = DATA / "raw" / "weather" / "forecast"   # one 16-day forecast file per day
 PROCESSED = DATA / "processed"
+REFERENCE = DATA / "reference"               # hand-made MSP, calendar and crop-season CSVs
 REPORTS = ROOT / "reports"
 
 

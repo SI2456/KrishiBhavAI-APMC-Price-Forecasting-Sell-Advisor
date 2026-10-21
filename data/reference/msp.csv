@@ -1,0 +1,34 @@
+# Minimum Support Price (MSP) per crop and kharif marketing season, Rs/quintal.
+# Season "2025-26" applies from 1 Oct 2025 to 30 Sep 2026.
+# Castor seed and potato have no MSP, so they are not listed (msp_rs_qtl is
+# empty for them in the features). Add each new season when the Cabinet
+# announces it (usually May-June).
+# status: verified = matches an official table or the Cabinet release;
+#         check    = not yet confirmed; check the CACP / PIB release before relying on it.
+crop,season,msp_rs_qtl,status,source
+Groundnut,2014-15,4000,check,
+Groundnut,2015-16,4030,verified,DES MSP table
+Groundnut,2016-17,4220,check,
+Groundnut,2017-18,4450,check,
+Groundnut,2018-19,4890,verified,Cabinet release 2019 (5090 = +200)
+Groundnut,2019-20,5090,verified,Cabinet release 2019
+Groundnut,2020-21,5275,verified,DES MSP table 2025
+Groundnut,2021-22,5550,verified,DES MSP table 2025
+Groundnut,2022-23,5850,verified,DES MSP table 2025
+Groundnut,2023-24,6377,verified,DES MSP table 2025
+Groundnut,2024-25,6783,verified,DES MSP table 2025
+Groundnut,2025-26,7263,verified,Cabinet release May 2025
+Groundnut,2026-27,7517,verified,Cabinet release May 2026
+Bajra,2014-15,1250,check,
+Bajra,2015-16,1275,verified,DES MSP table
+Bajra,2016-17,1330,verified,Parliament answer annexure
+Bajra,2017-18,1425,verified,Parliament answer annexure
+Bajra,2018-19,1950,verified,Cabinet release 2019
+Bajra,2019-20,2000,verified,Cabinet release 2019
+Bajra,2020-21,2150,verified,DES MSP table 2025
+Bajra,2021-22,2250,verified,DES MSP table 2025
+Bajra,2022-23,2350,verified,DES MSP table 2025
+Bajra,2023-24,2500,verified,DES MSP table 2025
+Bajra,2024-25,2625,verified,DES MSP table 2025
+Bajra,2025-26,2775,verified,Cabinet release May 2025
+Bajra,2026-27,2900,verified,Cabinet release May 2026

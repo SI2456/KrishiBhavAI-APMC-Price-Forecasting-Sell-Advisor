@@ -23,7 +23,7 @@ pytest -q
 ```
 
 Use Python 3.14 (the versions in `requirements.txt` are pinned to it).
-On Mac/Linux use `source .venv/bin/activate` and `cp`. All 63 tests should pass.
+On Mac/Linux use `source .venv/bin/activate` and `cp`. All 70 tests should pass.
 They use fake files, so no internet is needed.
 
 ## 2a. First check which markets report enough
@@ -124,6 +124,31 @@ the one you set in `MAIN_VARIETY` in `config.py`; merge spellings with
 treated as typos and blanked. Gaps of up to 3 days (Sundays, holidays) are
 filled and marked `filled=True`; longer gaps stay empty.
 
+## 6. Reference tables (MSP, calendar, crop seasons)
+
+Hand-made CSVs in `data/reference/`, committed to git. Edit them in Excel or a
+text editor; lines starting with `#` are comments.
+
+| File | What it holds |
+| --- | --- |
+| `msp.csv` | MSP per crop and season (groundnut, bajra; castor and potato have none). Season `2025-26` applies 1 Oct 2025 to 30 Sep 2026. Add each new season in May-June. |
+| `calendar.csv` | Dated events: `festival` (Diwali, Holi, Uttarayan), `apmc_holiday`, `policy` (export bans, duty changes). Leave `crop` / `market` empty for "all". |
+| `crop_seasons.csv` | Sowing and harvest windows that repeat every year (MM-DD, may cross 31 Dec). |
+
+Rows marked `status=check` still need confirming (with the shop, or the
+CACP/PIB release for MSP). After editing, run:
+
+```bat
+python -m krishibhav check-reference
+```
+
+It stops with a list of every typo it finds, and lists Mon-Sat days when no
+yard reported anything (likely holidays) in `reports/closed_day_candidates.csv`,
+so you can add the real APMC holidays. In Python,
+`reference.daily_flags(dates, "Potato", market="Deesa")` gives the daily
+features: festival / apmc_holiday / policy flags, days to Diwali, `in_harvest`
+etc., and the MSP in force.
+
 ## Commands
 
 | Command | What it does |
@@ -137,6 +162,7 @@ filled and marked `filled=True`; longer gaps stay empty.
 | `build-series` | Write `data/processed/daily_series.csv` |
 | `report` | Coverage table and charts in `reports/` |
 | `check-markets [--markets "A,B"] [--refresh]` | Reporting days per market, crop and year |
+| `check-reference` | Validate `data/reference/*.csv`, suggest APMC holidays |
 | `daily` | `fetch-today` + `fetch-weather` + `build-series` |
 
 ## Project layout
@@ -152,7 +178,8 @@ krishibhav/
   series.py     one variety, one clean daily series per market and commodity
   report.py     coverage table and charts
   markets.py    check-markets: how often each market reports (Agmarknet history)
-tests/          63 tests on fake Agmarknet/API data
+  reference.py  MSP, calendar and crop-season tables -> daily flags
+tests/          70 tests on fake Agmarknet/API data and the reference CSVs
 ```
 
 ## If something breaks

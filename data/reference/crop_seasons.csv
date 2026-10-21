@@ -1,0 +1,18 @@
+# Sowing and harvest windows that repeat every year, for Banaskantha.
+# start/end are month-day (MM-DD); a window may cross the new year (12-01 to 04-30).
+# These are typical windows, not exact dates: confirm them with the shop and
+# farmers, then change status to confirmed.
+crop,phase,start,end,status,note
+Potato,sowing,10-15,11-30,check,rabi potato planting
+Potato,harvest,01-15,03-31,check,digging; peak arrivals Feb-Mar
+Potato,cold_storage_release,04-01,11-30,check,stored potato sold through the year
+Castor Seed,sowing,07-01,08-31,check,kharif castor
+Castor Seed,harvest,12-01,04-30,check,several pickings; peak arrivals Jan-Mar
+Groundnut,sowing,06-15,07-31,check,kharif groundnut
+Groundnut,harvest,10-01,11-30,check,kharif groundnut
+Groundnut,sowing,02-01,03-15,check,summer groundnut (large in North Gujarat)
+Groundnut,harvest,05-15,06-30,check,summer groundnut
+Bajra,sowing,06-15,07-31,check,kharif bajra
+Bajra,harvest,09-15,10-31,check,kharif bajra
+Bajra,sowing,02-15,03-31,check,summer bajra (major in Banaskantha)
+Bajra,harvest,05-15,06-30,check,summer bajra
