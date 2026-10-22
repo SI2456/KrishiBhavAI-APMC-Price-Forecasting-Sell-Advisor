@@ -23,7 +23,7 @@ pytest -q
 ```
 
 Use Python 3.14 (the versions in `requirements.txt` are pinned to it).
-On Mac/Linux use `source .venv/bin/activate` and `cp`. All 80 tests should pass.
+On Mac/Linux use `source .venv/bin/activate` and `cp`. All 85 tests should pass.
 They use fake files, so no internet is needed.
 
 ## 2a. First check which markets report enough
@@ -208,10 +208,25 @@ was already known before that month, then predicts the month.
 
 Scores (on days with a real report): MAPE, RMSE (Rs/quintal), directional
 accuracy (did it call up vs down) and, for XGBoost, how often the actual price
-fell inside the 10-90 range (about 80% is honest). Results go to
-`reports/m3_results.md` (the table for the report, best value in bold) and
-`reports/m3_metrics.csv`; every prediction to `data/processed/predictions_m3.csv`.
-Options: `--models naive,xgb`, `--horizons 7`. A full run takes several minutes.
+fell inside the 10-90 range (about 80% is honest).
+
+- **Explanations:** every XGBoost forecast lists its top 3 drivers (SHAP values,
+  related features summed into plain labels such as "time of year" or "price vs
+  MSP") with their effect in % price change: `driver_1..3`, `effect_1..3`.
+- **Calibrated ranges:** the 10-90 range is shifted per crop and horizon so that
+  about 10% of outcomes fall below and 10% above, learned only from the previous
+  12 months of errors that were already known (`q10`, `q90`; the model's own are
+  `q10_raw`, `q90_raw`). The walk-forward starts 12 months early for this; those
+  months are not scored.
+- **Diebold-Mariano test:** is XGBoost's absolute % error significantly lower
+  than naive's, per crop and horizon (Newey-West variance, Harvey-Leybourne-
+  Newbold correction).
+
+Results go to `reports/m3_results.md` (tables for the report, best value in
+bold, coverage, DM test, top drivers), `reports/m3_metrics.csv`,
+`reports/m3_dm_test.csv` and `reports/m3_shap_importance.csv`; every prediction
+to `data/processed/predictions_m3.csv`. Options: `--models naive,xgb`,
+`--horizons 7`. A full run takes several minutes.
 
 ## Commands
 
@@ -246,8 +261,8 @@ krishibhav/
   markets.py    check-markets: how often each market reports (Agmarknet history)
   reference.py  MSP, calendar and crop-season tables -> daily flags
   features.py   M2 feature table: lags, rolling stats, weather, MSP, calendar, targets
-  models.py     M3 baselines + XGBoost, walk-forward evaluation and metrics
-tests/          80 tests on fake Agmarknet/API data and the reference CSVs
+  models.py     M3 baselines + XGBoost, walk-forward, SHAP drivers, calibrated ranges, DM test
+tests/          85 tests on fake Agmarknet/API data and the reference CSVs
 scripts/        daily_prices.ps1 (laptop price job) + install_task.ps1 (schedules it)
 ```
 
