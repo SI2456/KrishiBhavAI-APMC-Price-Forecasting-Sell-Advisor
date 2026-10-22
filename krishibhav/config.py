@@ -145,6 +145,19 @@ SPLITS: dict[str, tuple[str, str]] = {
     "test": ("2024-01-01", "2025-12-31"),
 }
 
+# ---- Sell / hold advisor (M5). The app lets the user change these.
+# Cost of keeping one quintal one more day, Rs. Potato: cold-storage rent
+# (roughly Rs 250-300 per quintal for an ~8-month season) plus handling.
+# Others: warehouse or home storage and small losses. CHECK WITH THE SHOP.
+STORAGE_COST_RS_QTL_DAY: dict[str, float] = {
+    "Potato": 1.2,
+    "Castor Seed": 0.3,
+    "Groundnut": 0.3,
+    "Bajra": 0.3,
+}
+INTEREST_RATE = 0.12            # yearly rate on money the farmer owes while waiting
+HOLD_THRESHOLD = 0.03           # hold only if the expected net gain beats 3% of today's price
+
 # A modal price this many times above (or below) the median of the 15 reported
 # days around it is treated as a bad entry (e.g. Rs/kg typed as Rs/quintal).
 SPIKE_RATIO = 3.0

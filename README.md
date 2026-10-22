@@ -23,7 +23,7 @@ pytest -q
 ```
 
 Use Python 3.14 (the versions in `requirements.txt` are pinned to it).
-On Mac/Linux use `source .venv/bin/activate` and `cp`. All 85 tests should pass.
+On Mac/Linux use `source .venv/bin/activate` and `cp`. All 94 tests should pass.
 They use fake files, so no internet is needed.
 
 ## 2a. First check which markets report enough
@@ -228,6 +228,33 @@ bold, coverage, DM test, top drivers), `reports/m3_metrics.csv`,
 to `data/processed/predictions_m3.csv`. Options: `--models naive,xgb`,
 `--horizons 7`. A full run takes several minutes.
 
+## 9. Sell-or-hold advisor (M5)
+
+```bat
+python -m krishibhav backtest
+```
+
+For each day and horizon h the advisor computes the expected net gain of
+holding one quintal, `G_h = P50(t+h) - P(t) - c_s*h - P(t)*r*h/365`, and with
+the best h: **hold** if `G_h` beats the threshold and the 10th-percentile price
+is above today's; **sell half** if it beats the threshold but the 10th
+percentile is lower; otherwise **sell now**. Storage cost `c_s` per crop,
+interest `r` and the threshold are in `config.py`
+(`STORAGE_COST_RS_QTL_DAY`, `INTEREST_RATE`, `HOLD_THRESHOLD`).
+
+The back-test replays every reported day of 2023-2025 using the walk-forward
+forecasts from `evaluate` (run that first), follows the advice for one quintal
+and compares the money received, after storage and interest, with selling on
+arrival. The threshold is chosen on 2023 only. It also reports "always hold 30
+days", perfect foresight (the upper bound) and a block-bootstrap 95% interval
+for the gain. Output: `reports/m5_backtest.md` (with example advice cards in
+Gujarati and English), `reports/m5_backtest.csv`,
+`data/processed/advisor_backtest.csv`.
+
+`advisor.advice_text(row, lot_qtl)` gives the advice, price range, expected
+gain for the lot and top 3 reasons in Gujarati and English. **Check the
+Gujarati wording with your father and a few farmers.**
+
 ## Commands
 
 | Command | What it does |
@@ -241,6 +268,7 @@ to `data/processed/predictions_m3.csv`. Options: `--models naive,xgb`,
 | `build-series` | Write `data/processed/daily_series.csv` |
 | `build-features` | Write `data/processed/features.csv` (model inputs + targets) |
 | `evaluate [--models ...] [--horizons ...]` | M3 walk-forward comparison, results in `reports/m3_results.md` |
+| `backtest [--lot 50]` | M5 advisor revenue back-test, results in `reports/m5_backtest.md` |
 | `report` | Coverage table and charts in `reports/` |
 | `check-markets [--markets "A,B"] [--refresh]` | Reporting days per market, crop and year |
 | `check-reference` | Validate `data/reference/*.csv`, suggest APMC holidays |
@@ -262,7 +290,8 @@ krishibhav/
   reference.py  MSP, calendar and crop-season tables -> daily flags
   features.py   M2 feature table: lags, rolling stats, weather, MSP, calendar, targets
   models.py     M3 baselines + XGBoost, walk-forward, SHAP drivers, calibrated ranges, DM test
-tests/          85 tests on fake Agmarknet/API data and the reference CSVs
+  advisor.py    M5 sell / hold rules, revenue back-test, Gujarati + English advice text
+tests/          94 tests on fake Agmarknet/API data and the reference CSVs
 scripts/        daily_prices.ps1 (laptop price job) + install_task.ps1 (schedules it)
 ```
 

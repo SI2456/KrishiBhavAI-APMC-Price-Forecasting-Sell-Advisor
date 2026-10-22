@@ -9,6 +9,7 @@
   build-series    write data/processed/daily_series.csv
   build-features  write data/processed/features.csv (model inputs + targets)
   evaluate        M3: naive, seasonal-naive and XGBoost, walk-forward on 2023-2025
+  backtest        M5: sell/hold advisor replayed on 2023-2025 vs selling on arrival
   report          coverage table + price charts in reports/
   check-markets   how often each market reports each crop, per year (Agmarknet history)
   check-reference validate data/reference/*.csv and suggest APMC holidays
@@ -44,6 +45,8 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("evaluate")
     p.add_argument("--models", default="naive,seasonal,xgb")
     p.add_argument("--horizons", default="", help="e.g. 7,14 (default: config.HORIZONS)")
+    p = sub.add_parser("backtest")
+    p.add_argument("--lot", type=float, default=50.0, help="lot size in quintal for the example advice")
     sub.add_parser("report")
     p = sub.add_parser("check-markets")
     p.add_argument("--markets", default="",
@@ -56,7 +59,7 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s",
                         datefmt="%H:%M:%S")
 
-    from . import db, ingest, datagov, weather, series, report, markets, reference, features, models
+    from . import db, ingest, datagov, weather, series, report, markets, reference, features, models, advisor
 
     if args.cmd == "init-db":
         db.init_db(db.get_engine())
@@ -78,6 +81,8 @@ def main(argv: list[str] | None = None) -> int:
     elif args.cmd == "evaluate":
         horizons = [int(h) for h in args.horizons.split(",") if h.strip()] or None
         models.run([m.strip() for m in args.models.split(",") if m.strip()], horizons)
+    elif args.cmd == "backtest":
+        advisor.run(args.lot)
     elif args.cmd == "report":
         report.run_report()
     elif args.cmd == "check-markets":
