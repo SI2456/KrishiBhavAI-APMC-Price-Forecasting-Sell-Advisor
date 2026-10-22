@@ -23,7 +23,7 @@ pytest -q
 ```
 
 Use Python 3.14 (the versions in `requirements.txt` are pinned to it).
-On Mac/Linux use `source .venv/bin/activate` and `cp`. All 74 tests should pass.
+On Mac/Linux use `source .venv/bin/activate` and `cp`. All 80 tests should pass.
 They use fake files, so no internet is needed.
 
 ## 2a. First check which markets report enough
@@ -182,12 +182,36 @@ ahead) plus `y_price_7/14/30` (the price then, in Rs/quintal).
 | Policy | `msp_rs_qtl`, `price_to_msp` (groundnut and bajra only) |
 | Calendar | `dow`, `month`, `week`, `doy_sin/cos`, `festival`, `apmc_holiday`, `policy`, `days_to_diwali`, `in_harvest` etc. |
 | Lead markets | `x_palanpur_gap`, `x_palanpur_ret_7`, same for Dhanera |
+| Seasonal | `seas_ret_7/14/30`: last year's change over the same window |
 
 The `split` column follows the plan, in time order only: `train` 2015-2022,
 `valid` 2023, `test` 2024-2025 (`warmup` 2014, `live` after 2025). Rows include
 days filled from the previous report (`reported=False`); evaluate on reported
 days. A test checks that changing anything after day t never changes a feature
 on or before t. Column coverage is saved in `reports/feature_coverage.csv`.
+
+## 8. Baselines and XGBoost (M3)
+
+```bat
+python -m krishibhav evaluate
+```
+
+Compares three models on every horizon, walk-forward over 2023 (valid) and
+2024-2025 (test): each month XGBoost is retrained only on rows whose outcome
+was already known before that month, then predicts the month.
+
+| Model | Forecast |
+| --- | --- |
+| `naive` | price in h days = today's price |
+| `seasonal` | today's price x last year's change over the same window |
+| `xgb` | one XGBoost model for all crops, quantile loss: 10th / 50th / 90th percentile |
+
+Scores (on days with a real report): MAPE, RMSE (Rs/quintal), directional
+accuracy (did it call up vs down) and, for XGBoost, how often the actual price
+fell inside the 10-90 range (about 80% is honest). Results go to
+`reports/m3_results.md` (the table for the report, best value in bold) and
+`reports/m3_metrics.csv`; every prediction to `data/processed/predictions_m3.csv`.
+Options: `--models naive,xgb`, `--horizons 7`. A full run takes several minutes.
 
 ## Commands
 
@@ -201,6 +225,7 @@ on or before t. Column coverage is saved in `reports/feature_coverage.csv`.
 | `load-weather` | Re-load all saved forecast files |
 | `build-series` | Write `data/processed/daily_series.csv` |
 | `build-features` | Write `data/processed/features.csv` (model inputs + targets) |
+| `evaluate [--models ...] [--horizons ...]` | M3 walk-forward comparison, results in `reports/m3_results.md` |
 | `report` | Coverage table and charts in `reports/` |
 | `check-markets [--markets "A,B"] [--refresh]` | Reporting days per market, crop and year |
 | `check-reference` | Validate `data/reference/*.csv`, suggest APMC holidays |
@@ -221,7 +246,8 @@ krishibhav/
   markets.py    check-markets: how often each market reports (Agmarknet history)
   reference.py  MSP, calendar and crop-season tables -> daily flags
   features.py   M2 feature table: lags, rolling stats, weather, MSP, calendar, targets
-tests/          74 tests on fake Agmarknet/API data and the reference CSVs
+  models.py     M3 baselines + XGBoost, walk-forward evaluation and metrics
+tests/          80 tests on fake Agmarknet/API data and the reference CSVs
 scripts/        daily_prices.ps1 (laptop price job) + install_task.ps1 (schedules it)
 ```
 

@@ -115,6 +115,24 @@ def test_msp_lead_and_phase_columns(refs):
     assert not (t["market"] == "Palanpur").any()                        # lead markets get no rows
 
 
+def test_seasonal_change(refs):
+    """seas_ret_h at t = last year's change from around t-365 to around t+h-365."""
+    days = pd.date_range("2015-01-01", "2016-12-31")
+    p = pd.Series(1000.0 * np.exp(0.3 * np.sin(2 * np.pi * days.dayofyear / 365)), index=days)
+    t = features.build_features(make_daily({("Deesa", "Potato"): p}), make_weather(days), refs)
+    t = t.set_index("date")
+    day = pd.Timestamp("2016-03-01")
+    row = t.loc[day]
+    lp, d = np.log(p), pd.Timedelta(days=1)
+
+    def week(center):                                                   # 7 days centred on a date
+        return lp[center - 3 * d:center + 3 * d].mean()
+
+    expected = week(day - 365 * d + 30 * d) - week(day - 365 * d)
+    assert row["seas_ret_30"] == pytest.approx(expected, rel=1e-3)
+    assert np.isnan(t.loc["2015-06-01", "seas_ret_7"])                 # no year of history yet
+
+
 def test_splits():
     dates = pd.Series(pd.to_datetime(["2014-06-01", "2015-01-01", "2022-12-31", "2023-07-01",
                                       "2024-01-01", "2025-12-31", "2026-01-01"]))

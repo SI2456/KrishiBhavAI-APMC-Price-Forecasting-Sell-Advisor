@@ -18,6 +18,9 @@ Feature groups (column prefixes):
   calendar   dow, month, week, doy_sin/doy_cos, festival, apmc_holiday, policy,
              days_to_diwali, in_<phase> (sowing / harvest / ...)
   lead       x_<market>_gap (log price gap to a lead market), x_<market>_ret_7
+  seasonal   seas_ret_<h>: last year's log change over the same h-day window
+             (from the week around t-365 to the week around t+h-365); the
+             seasonal-naive forecast, and a feature for the models
 
 `split` marks train / valid / test from config.SPLITS (time order only),
 `warmup` before training starts and `live` after the test period.
@@ -75,6 +78,12 @@ def price_features(s: pd.DataFrame) -> pd.DataFrame:
     out["arr"] = arr
     out["arr_7"] = arr.rolling(7, min_periods=1).sum()
     out["arr_ratio_ly"] = out["arr_7"] / out["arr_7"].shift(364)
+
+    # Week-averaged log price; the latest day it uses for seas_ret_h is
+    # t + h - 365 + 3, which is in the past for every h up to 30.
+    week = lp.rolling(7, center=True, min_periods=3).mean()
+    for h in config.HORIZONS:
+        out[f"seas_ret_{h}"] = week.shift(365 - h) - week.shift(365)
     return out
 
 
