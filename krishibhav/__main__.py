@@ -7,6 +7,7 @@
   fetch-weather   weather history (incremental) + 16-day forecast from Open-Meteo
   load-weather    re-load all saved forecast files
   build-series    write data/processed/daily_series.csv
+  build-features  write data/processed/features.csv (model inputs + targets)
   report          coverage table + price charts in reports/
   check-markets   how often each market reports each crop, per year (Agmarknet history)
   check-reference validate data/reference/*.csv and suggest APMC holidays
@@ -38,6 +39,7 @@ def main(argv: list[str] | None = None) -> int:
                    help="only save today's forecast JSON; skip history and the database")
     sub.add_parser("load-weather")
     sub.add_parser("build-series")
+    sub.add_parser("build-features")
     sub.add_parser("report")
     p = sub.add_parser("check-markets")
     p.add_argument("--markets", default="",
@@ -50,7 +52,7 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s",
                         datefmt="%H:%M:%S")
 
-    from . import db, ingest, datagov, weather, series, report, markets, reference
+    from . import db, ingest, datagov, weather, series, report, markets, reference, features
 
     if args.cmd == "init-db":
         db.init_db(db.get_engine())
@@ -67,6 +69,8 @@ def main(argv: list[str] | None = None) -> int:
         weather.load_forecasts_raw()
     elif args.cmd == "build-series":
         series.build_series()
+    elif args.cmd == "build-features":
+        features.build()
     elif args.cmd == "report":
         report.run_report()
     elif args.cmd == "check-markets":

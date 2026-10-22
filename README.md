@@ -23,7 +23,7 @@ pytest -q
 ```
 
 Use Python 3.14 (the versions in `requirements.txt` are pinned to it).
-On Mac/Linux use `source .venv/bin/activate` and `cp`. All 70 tests should pass.
+On Mac/Linux use `source .venv/bin/activate` and `cp`. All 74 tests should pass.
 They use fake files, so no internet is needed.
 
 ## 2a. First check which markets report enough
@@ -163,6 +163,32 @@ so you can add the real APMC holidays. In Python,
 features: festival / apmc_holiday / policy flags, days to Diwali, `in_harvest`
 etc., and the MSP in force.
 
+## 7. Feature table (M2)
+
+```bat
+python -m krishibhav build-features
+```
+
+Writes `data/processed/features.csv`: one row per day for each Deesa crop
+(`FEATURE_MARKETS` in `config.py`), with every feature built only from data
+known on that day, and targets `y_ret_7/14/30` (log return to 7/14/30 days
+ahead) plus `y_price_7/14/30` (the price then, in Rs/quintal).
+
+| Group | Columns |
+| --- | --- |
+| Price | `log_price`, `ret_1/7/14/30/365`, `ma_gap_7/30/90`, `vol_7/30/90`, `spread`, `reported`, `days_since_report` |
+| Arrivals | `arr`, `arr_7`, `arr_ratio_ly` (empty until an arrivals source is loaded) |
+| Weather | `rain_7/30/90`, `tmean_30`, `tmax_7`, `et0_30` |
+| Policy | `msp_rs_qtl`, `price_to_msp` (groundnut and bajra only) |
+| Calendar | `dow`, `month`, `week`, `doy_sin/cos`, `festival`, `apmc_holiday`, `policy`, `days_to_diwali`, `in_harvest` etc. |
+| Lead markets | `x_palanpur_gap`, `x_palanpur_ret_7`, same for Dhanera |
+
+The `split` column follows the plan, in time order only: `train` 2015-2022,
+`valid` 2023, `test` 2024-2025 (`warmup` 2014, `live` after 2025). Rows include
+days filled from the previous report (`reported=False`); evaluate on reported
+days. A test checks that changing anything after day t never changes a feature
+on or before t. Column coverage is saved in `reports/feature_coverage.csv`.
+
 ## Commands
 
 | Command | What it does |
@@ -174,6 +200,7 @@ etc., and the MSP in force.
 | `fetch-weather [--forecast-only] [--raw-only]` | Weather history and forecast |
 | `load-weather` | Re-load all saved forecast files |
 | `build-series` | Write `data/processed/daily_series.csv` |
+| `build-features` | Write `data/processed/features.csv` (model inputs + targets) |
 | `report` | Coverage table and charts in `reports/` |
 | `check-markets [--markets "A,B"] [--refresh]` | Reporting days per market, crop and year |
 | `check-reference` | Validate `data/reference/*.csv`, suggest APMC holidays |
@@ -193,7 +220,8 @@ krishibhav/
   report.py     coverage table and charts
   markets.py    check-markets: how often each market reports (Agmarknet history)
   reference.py  MSP, calendar and crop-season tables -> daily flags
-tests/          70 tests on fake Agmarknet/API data and the reference CSVs
+  features.py   M2 feature table: lags, rolling stats, weather, MSP, calendar, targets
+tests/          74 tests on fake Agmarknet/API data and the reference CSVs
 scripts/        daily_prices.ps1 (laptop price job) + install_task.ps1 (schedules it)
 ```
 

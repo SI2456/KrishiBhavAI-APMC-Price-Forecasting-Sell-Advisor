@@ -133,6 +133,18 @@ WEATHER_DAILY_VARS = [
 # Forward-fill a missing trading day only if the gap is this short.
 MAX_FILL_DAYS = 3
 
+# ---- Features and evaluation (M2 onward)
+# Series the models forecast, and the nearby markets used as lead indicators.
+FEATURE_MARKETS = ["Deesa"]
+LEAD_MARKETS: dict[str, list[str]] = {"Deesa": ["Palanpur", "Dhanera"]}
+HORIZONS = [7, 14, 30]          # days ahead
+# Time-ordered splits (never random). 2014 is warm-up for the 365-day lag.
+SPLITS: dict[str, tuple[str, str]] = {
+    "train": ("2015-01-01", "2022-12-31"),
+    "valid": ("2023-01-01", "2023-12-31"),
+    "test": ("2024-01-01", "2025-12-31"),
+}
+
 # A modal price this many times above (or below) the median of the 15 reported
 # days around it is treated as a bad entry (e.g. Rs/kg typed as Rs/quintal).
 SPIKE_RATIO = 3.0
