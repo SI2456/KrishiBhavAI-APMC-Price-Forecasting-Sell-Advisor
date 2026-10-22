@@ -23,7 +23,7 @@ pytest -q
 ```
 
 Use Python 3.14 (the versions in `requirements.txt` are pinned to it).
-On Mac/Linux use `source .venv/bin/activate` and `cp`. All 94 tests should pass.
+On Mac/Linux use `source .venv/bin/activate` and `cp`. All 98 tests should pass.
 They use fake files, so no internet is needed.
 
 ## 2a. First check which markets report enough
@@ -255,6 +255,27 @@ Gujarati and English), `reports/m5_backtest.csv`,
 gain for the lot and top 3 reasons in Gujarati and English. **Check the
 Gujarati wording with your father and a few farmers.**
 
+## 10. Today's advice (for the web app)
+
+```bat
+python -m krishibhav advise --lot 50
+```
+
+Rebuilds the feature table from the database (add `--no-rebuild` to skip),
+trains XGBoost on every row whose outcome is already known (saved in
+`models/`, not in git), and forecasts each Deesa crop from its latest reported
+price. The 10-90 range is calibrated on that crop's most recent 12 months of
+walk-forward errors, so run `evaluate` every month or so to keep them recent.
+The advisor rules then give the advice, printed as Gujarati / English cards
+and written to **`data/processed/advice_latest.json`**, the file the web app
+reads: per crop the action, best horizon, price range for 7/14/30 days,
+expected gain per quintal and for the lot, top 3 reasons (English and
+Gujarati) and the disclaimer.
+
+If a crop's latest Deesa price is more than 7 days old the card warns about
+it; after 30 days it gives no advice ("no recent price") instead of guessing.
+`--crop Potato` limits it to one crop.
+
 ## Commands
 
 | Command | What it does |
@@ -269,6 +290,7 @@ Gujarati wording with your father and a few farmers.**
 | `build-features` | Write `data/processed/features.csv` (model inputs + targets) |
 | `evaluate [--models ...] [--horizons ...]` | M3 walk-forward comparison, results in `reports/m3_results.md` |
 | `backtest [--lot 50]` | M5 advisor revenue back-test, results in `reports/m5_backtest.md` |
+| `advise [--lot 50] [--crop ...] [--no-rebuild]` | Today's advice per Deesa crop -> `data/processed/advice_latest.json` |
 | `report` | Coverage table and charts in `reports/` |
 | `check-markets [--markets "A,B"] [--refresh]` | Reporting days per market, crop and year |
 | `check-reference` | Validate `data/reference/*.csv`, suggest APMC holidays |
@@ -291,7 +313,8 @@ krishibhav/
   features.py   M2 feature table: lags, rolling stats, weather, MSP, calendar, targets
   models.py     M3 baselines + XGBoost, walk-forward, SHAP drivers, calibrated ranges, DM test
   advisor.py    M5 sell / hold rules, revenue back-test, Gujarati + English advice text
-tests/          94 tests on fake Agmarknet/API data and the reference CSVs
+  live.py       advise: train on all data, today's advice per crop as JSON for the app
+tests/          98 tests on fake Agmarknet/API data and the reference CSVs
 scripts/        daily_prices.ps1 (laptop price job) + install_task.ps1 (schedules it)
 ```
 

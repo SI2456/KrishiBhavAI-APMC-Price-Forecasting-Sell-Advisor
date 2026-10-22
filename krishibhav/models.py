@@ -6,10 +6,12 @@ Models (each predicts the log return to t+h; price = P[t] * exp(return)):
   xgb       one XGBoost model for all crops, quantile loss -> 10th / 50th / 90th
             percentile; the median is the point forecast
 
-Walk-forward: for every month from the start of `valid` to the end of `test`,
+Walk-forward: for every month from the start of `valid` to the latest data,
 XGBoost is retrained on rows whose target was already known before that month
 began (date + h < month start) and predicts the month. Nothing is tuned on
-`test`. Errors are measured on days with a real report at t.
+`test`. Errors are measured on days with a real report at t. Months after
+`test` (split `live`) are predicted too, so live advice can calibrate its
+ranges on recent errors; the report tables show only `valid` and `test`.
 
 Explanations: each xgb forecast carries its top 3 drivers (SHAP values of the
 median forecast, related features summed into one plain label, e.g. sin/cos
@@ -185,6 +187,16 @@ PREDICTORS = {"naive": predict_naive, "seasonal": predict_seasonal}
 
 
 # ---------------------------------------------------------------- calibrated ranges
+def range_offsets(hist: pd.DataFrame, min_rows: int = CAL_MIN_ROWS) -> tuple[float, float]:
+    """Shifts for q10 / q90 so ~10% of past outcomes fall below and ~10% above.
+    hist: past rows with y_ret, q10_raw (or q10) and q90_raw (or q90)."""
+    if len(hist) < min_rows:
+        return 0.0, 0.0
+    q10 = hist["q10_raw"] if "q10_raw" in hist else hist["q10"]
+    q90 = hist["q90_raw"] if "q90_raw" in hist else hist["q90"]
+    return float(np.quantile(hist["y_ret"] - q10, 0.10)), float(np.quantile(hist["y_ret"] - q90, 0.90))
+
+
 def calibrate(pred: pd.DataFrame, h: int, months: int = CAL_MONTHS,
               min_rows: int = CAL_MIN_ROWS) -> pd.DataFrame:
     """Shift q10 / q90 per crop so ~10% of outcomes fall below and ~10% above,
@@ -202,8 +214,7 @@ def calibrate(pred: pd.DataFrame, h: int, months: int = CAL_MONTHS,
             hist = pred[window & (pred["commodity"] == crop)]
             if len(hist) < min_rows:
                 continue
-            lo = np.quantile(hist["y_ret"] - hist["q10"], 0.10)
-            hi = np.quantile(hist["y_ret"] - hist["q90"], 0.90)
+            lo, hi = range_offsets(hist, min_rows)
             rows = this & (pred["commodity"] == crop)
             out.loc[rows, "q10"] = np.minimum(pred.loc[rows, "q10"] + lo, pred.loc[rows, "q50"])
             out.loc[rows, "q90"] = np.maximum(pred.loc[rows, "q90"] + hi, pred.loc[rows, "q50"])
@@ -217,7 +228,7 @@ def evaluate(table: pd.DataFrame, models=None, horizons=None, start: str | None 
     models = models or MODELS
     horizons = horizons or config.HORIZONS
     start = pd.Timestamp(start or config.SPLITS["valid"][0])
-    end = pd.Timestamp(end or config.SPLITS["test"][1])
+    end = pd.Timestamp(end) if end else table["date"].max()
     cal_start = start - pd.DateOffset(months=CAL_MONTHS)
     table = table.sort_values(["date", "commodity"]).reset_index(drop=True)
     out = []

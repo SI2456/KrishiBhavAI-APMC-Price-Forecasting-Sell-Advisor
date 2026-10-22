@@ -16,6 +16,7 @@ RAW_DATAGOV = DATA / "raw" / "datagov"       # daily API responses are saved her
 RAW_WEATHER_FORECAST = DATA / "raw" / "weather" / "forecast"   # one 16-day forecast file per day
 PROCESSED = DATA / "processed"
 REFERENCE = DATA / "reference"               # hand-made MSP, calendar and crop-season CSVs
+MODELS_DIR = ROOT / "models"                 # trained models from `advise` (not in git)
 REPORTS = ROOT / "reports"
 
 
@@ -156,7 +157,9 @@ STORAGE_COST_RS_QTL_DAY: dict[str, float] = {
     "Bajra": 0.3,
 }
 INTEREST_RATE = 0.12            # yearly rate on money the farmer owes while waiting
-HOLD_THRESHOLD = 0.03           # hold only if the expected net gain beats 3% of today's price
+# Hold only if the expected net gain beats this share of today's price. The plan
+# started at 3%; the 2023 back-test (valid year only) chose 1%.
+HOLD_THRESHOLD = 0.01
 
 # A modal price this many times above (or below) the median of the 15 reported
 # days around it is treated as a bad entry (e.g. Rs/kg typed as Rs/quintal).

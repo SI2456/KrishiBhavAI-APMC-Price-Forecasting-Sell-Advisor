@@ -117,7 +117,8 @@ def test_advice_text_gujarati_and_lot():
 def test_sell_now_shows_no_gain():
     row = advisor.decide(pd.DataFrame([wide_row()]), 0.03, STORAGE, RATE).iloc[0]
     t = advisor.advice_text(row, lot_qtl=10)
-    assert t["gu"]["advice"] == "હમણાં વેચો" and "Rs 0 on 10 quintal" in t["en"]["gain"]
+    assert t["gu"]["advice"] == "હમણાં વેચો" and t["en"]["gain"].startswith("Holding is not expected to pay")
+    assert t["gu"]["gain"] == "ભાડું અને વ્યાજ બાદ માલ રાખવાથી ફાયદો દેખાતો નથી"
 
 
 def test_bootstrap_ci():

@@ -226,13 +226,15 @@ def advice_text(row: pd.Series, lot_qtl: float = 1.0) -> dict:
             "advice": en_action,
             "forecast": f"Price in {h} days: about Rs {p50:,.0f} (likely Rs {p10:,.0f} to Rs {p90:,.0f}); "
                         f"today Rs {row['price_now']:,.0f}",
-            "gain": f"Expected extra after costs: Rs {gain_lot:,.0f} on {lot_qtl:g} quintal",
+            "gain": (f"Expected extra after costs: Rs {gain_lot:,.0f} on {lot_qtl:g} quintal" if share_held
+                     else "Holding is not expected to pay after storage and interest costs"),
             "reasons": reasons_en, "note": DISCLAIMER[0],
         },
         "gu": {
             "advice": gu_action,
             "forecast": f"{h} દિવસ પછી અંદાજિત ભાવ ₹{p50:,.0f} (₹{p10:,.0f} થી ₹{p90:,.0f}); આજનો ભાવ ₹{row['price_now']:,.0f}",
-            "gain": f"ખર્ચ બાદ અંદાજિત વધારાનો નફો: ₹{gain_lot:,.0f} ({lot_qtl:g} ક્વિન્ટલ પર)",
+            "gain": (f"ખર્ચ બાદ અંદાજિત વધારાનો નફો: ₹{gain_lot:,.0f} ({lot_qtl:g} ક્વિન્ટલ પર)" if share_held
+                     else "ભાડું અને વ્યાજ બાદ માલ રાખવાથી ફાયદો દેખાતો નથી"),
             "reasons": reasons_gu, "note": DISCLAIMER[1],
         },
     }
